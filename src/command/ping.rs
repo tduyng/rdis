@@ -5,7 +5,7 @@ use tokio::{io::AsyncWriteExt, net::TcpStream};
 pub struct PingCommand;
 
 impl PingCommand {
-    pub async fn execute(&self, stream: &mut TcpStream, _: Vec<String>) -> Result<()> {
+    pub async fn execute(&self, stream: &mut TcpStream) -> Result<()> {
         stream
             .write_all(b"+PONG\r\n")
             .await

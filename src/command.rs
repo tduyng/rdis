@@ -6,6 +6,7 @@ mod ping;
 
 use echo::EchoCommand;
 use ping::PingCommand;
+use crate::stream::RedisRequest;
 
 #[derive(Debug, Clone)]
 pub struct CommandRegistry {
@@ -29,14 +30,13 @@ impl CommandRegistry {
 
     pub async fn execute(
         &self,
-        command_name: &str,
         stream: &mut TcpStream,
-        args: Vec<String>,
+        request: &RedisRequest
     ) -> Result<()> {
-        match command_name {
-            "ping" => self.ping_command.execute(stream, args).await,
-            "echo" => self.echo_command.execute(stream, args).await,
-            _ => Err(anyhow!("Unknown command: {}", command_name)),
+        match request.command_name.as_str() {
+            "ping" => self.ping_command.execute(stream).await,
+            "echo" => self.echo_command.execute(stream, &request.args).await,
+            _ => Err(anyhow!("Unknown command: {}", request.command_name)),
         }
     }
 }
