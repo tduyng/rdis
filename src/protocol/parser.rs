@@ -1,108 +1,71 @@
+use crate::command::RedisCommand;
 use anyhow::{anyhow, Result};
-use std::collections::VecDeque;
-use tokio::{io::AsyncReadExt, net::TcpStream};
 
-pub enum RespValue {
-    SimpleString(String),
-    Error(String),
-    Integer(i64),
-    BulkString(Option<Vec<u8>>),
-    Array(Vec<RespValue>),
+fn parse_simple_string(buffer: &[u8]) -> Result<(usize, String)> {
+    assert!(buffer[0] == b'+');
+    let term = buffer.iter().position(|&x| x == b'\r').unwrap();
+    let value = String::from_utf8(buffer[1..term].to_vec()).unwrap();
+    // +2 to get past the trailing \r\n
+    Ok((term + 2, value))
 }
 
-pub async fn read_resp_value(stream: &mut TcpStream) -> Result<RespValue> {
-    let mut buffer = Vec::new();
-    let mut is_reading_bulk_string = false;
-    let mut bulk_string_length = 0;
-
-    loop {
-        let mut read_buf = [0; 1024];
-        let bytes_read = stream.read(&mut read_buf).await?;
-        if bytes_read == 0 {
-            break;
-        }
-        buffer.extend_from_slice(&read_buf[..bytes_read]);
-
-        let mut command_buffer = VecDeque::new();
-        while let Some(idx) = buffer.iter().position(|&b| b == b'\n') {
-            let command = buffer.drain(..idx + 1).collect::<Vec<_>>();
-            command_buffer.push_back(command);
-        }
-
-        while let Some(mut command) = command_buffer.pop_front() {
-            if let Some(&b'\r') = command.last() {
-                command.pop();
-            }
-            if let Some(&b'\n') = command.last() {
-                command.pop();
-            }
-
-            // Parsing RESP value
-            let resp_value = parse_resp_value(
-                &command,
-                &mut is_reading_bulk_string,
-                &mut bulk_string_length,
-            )?;
-
-            // Check if the parsing is complete
-            match resp_value {
-                Some(value) => return Ok(value),
-                None => continue,
-            }
-        }
+fn parse_bulk_string(buffer: &[u8]) -> Result<(usize, String)> {
+    assert!(buffer[0] == b'$');
+    let sep = buffer.iter().position(|&x| x == b'\r').unwrap();
+    let string_len = String::from_utf8(buffer[1..sep].to_vec())
+        .unwrap()
+        .parse::<usize>()
+        .unwrap();
+    if string_len == 0 {
+        // Empty string: $0\r\n\r\n -> sep points to first \r, so + 3 to get to the end
+        return Ok((sep + 4, String::new()));
     }
-
-    Err(anyhow!("Incomplete RESP value"))
+    let string_start = sep + 2; // sep is \r, so +2 to get to the start of the actual string
+    let string_end = string_start + string_len;
+    let value = String::from_utf8(buffer[string_start..string_end].to_vec()).unwrap();
+    // +2 to get past the trailing \r\n
+    Ok((string_end + 2, value))
 }
 
-fn parse_resp_value(
-    command: &[u8],
-    is_reading_bulk_string: &mut bool,
-    bulk_string_length: &mut usize,
-) -> Result<Option<RespValue>> {
-    if *is_reading_bulk_string {
-        *bulk_string_length -= command.len();
-        if *bulk_string_length > 0 {
-            // Continue reading bulk string
-            return Ok(None);
-        } else {
-            // Bulk string reading is complete
-            *is_reading_bulk_string = false;
-            return Ok(Some(RespValue::BulkString(Some(command.to_vec()))));
-        }
+pub fn parse_command(buffer: &[u8]) -> Result<RedisCommand> {
+    if buffer[0] != b'*' {
+        return Err(anyhow!(
+            "Invalid command syntax, expected array, got {}",
+            buffer[0]
+        ));
+    };
+
+    let sep = buffer.iter().position(|&x| x == b'\r').unwrap();
+    let array_length = String::from_utf8(buffer[1..sep].to_vec())
+        .unwrap()
+        .parse::<usize>()
+        .unwrap();
+    let mut pos = sep + 2;
+    let mut params = Vec::<String>::with_capacity(array_length);
+
+    for _ in 0..array_length {
+        match buffer[pos] {
+            b'$' => {
+                let (bytes, value) = parse_bulk_string(&buffer[pos..])?;
+                params.push(value);
+                pos += bytes;
+            }
+            b'+' => {
+                let (bytes, value) = parse_simple_string(&buffer[pos..])?;
+                params.push(value);
+                pos += bytes;
+            }
+            _ => {
+                return Err(anyhow!(
+                    "Invalid command syntax, expected bulk string, got {}",
+                    buffer[pos]
+                ))
+            }
+        };
     }
 
-    match command.first() {
-        Some(&b'+') => {
-            let value = String::from_utf8_lossy(&command[1..]).to_string();
-            Ok(Some(RespValue::SimpleString(value)))
-        }
-        Some(&b'-') => {
-            let error_message = String::from_utf8_lossy(&command[1..]).to_string();
-            Ok(Some(RespValue::Error(error_message)))
-        }
-        Some(&b':') => {
-            let value = String::from_utf8_lossy(&command[1..]).parse::<i64>()?;
-            Ok(Some(RespValue::Integer(value)))
-        }
-        Some(&b'$') => {
-            let length = String::from_utf8_lossy(&command[1..]).parse::<usize>()?;
-            if length == -1isize as usize {
-                Ok(Some(RespValue::BulkString(None)))
-            } else {
-                *is_reading_bulk_string = true;
-                *bulk_string_length = length;
-                Ok(None)
-            }
-        }
-        Some(&b'*') => {
-            let length = String::from_utf8_lossy(&command[1..]).parse::<usize>()?;
-            let mut array = Vec::with_capacity(length);
-            for _ in 0..length {
-                array.push(RespValue::BulkString(None));
-            }
-            Ok(Some(RespValue::Array(array)))
-        }
-        _ => Err(anyhow!("Invalid RESP value")),
-    }
+    Ok(RedisCommand {
+        name: params[0].clone(),
+        args: params[1..].to_vec(),
+    })
 }

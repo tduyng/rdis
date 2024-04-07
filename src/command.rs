@@ -1,12 +1,14 @@
+use self::{echo::EchoCommand, ping::PingCommand};
 use anyhow::{anyhow, Result};
 use tokio::net::TcpStream;
 
 mod echo;
 mod ping;
 
-use echo::EchoCommand;
-use ping::PingCommand;
-use crate::stream::RedisRequest;
+pub struct RedisCommand {
+    pub name: String,
+    pub args: Vec<String>,
+}
 
 #[derive(Debug, Clone)]
 pub struct CommandRegistry {
@@ -28,15 +30,11 @@ impl CommandRegistry {
         }
     }
 
-    pub async fn execute(
-        &self,
-        stream: &mut TcpStream,
-        request: &RedisRequest
-    ) -> Result<()> {
-        match request.command_name.as_str() {
+    pub async fn execute(&self, stream: &mut TcpStream, command: &RedisCommand) -> Result<()> {
+        match command.name.to_lowercase().as_str() {
             "ping" => self.ping_command.execute(stream).await,
-            "echo" => self.echo_command.execute(stream, &request.args).await,
-            _ => Err(anyhow!("Unknown command: {}", request.command_name)),
+            "echo" => self.echo_command.execute(stream, command).await,
+            _ => Err(anyhow!("Unknown command: {}", command.name)),
         }
     }
 }
