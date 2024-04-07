@@ -1,0 +1,14 @@
+use anyhow::{anyhow, Result};
+use tokio::{io::AsyncWriteExt, net::TcpStream};
+
+#[derive(Debug, Clone)]
+pub struct PingCommand;
+
+impl PingCommand {
+    pub async fn execute(&self, stream: &mut TcpStream, _: Vec<String>) -> Result<()> {
+        stream
+            .write_all(b"+PONG\r\n")
+            .await
+            .map_err(|e| anyhow!("Failed to write PONG response to stream: {}", e))
+    }
+}

@@ -1,31 +1,22 @@
 use anyhow::Result;
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::{TcpListener, TcpStream},
-};
+use redis_starter_rust::{command::CommandRegistry, stream::handle_stream};
+use tokio::net::TcpListener;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let listener = TcpListener::bind("127.0.0.1:6379").await?;
     println!("Server listening on 127.0.0.1:6379");
 
-    loop {
-        let (socket, _) = listener.accept().await?;
-        tokio::spawn(handle_connection(socket));
-    }
-}
-
-async fn handle_connection(mut socket: TcpStream) -> Result<()> {
-    println!("Accepted new connection");
+    let registry = CommandRegistry::new();
 
     loop {
-        let mut buffer = [0; 1024];
-        let bytes_read = socket.read(&mut buffer).await?;
-        if bytes_read == 0 {
-            break;
+        match listener.accept().await {
+            Ok((stream, _)) => {
+                tokio::spawn(handle_stream(stream, registry.clone()));
+            }
+            Err(e) => {
+                eprintln!("Error accepting connection: {}", e);
+            }
         }
-        let response = "+PONG\r\n";
-        socket.write_all(response.as_bytes()).await?;
     }
-    Ok(())
 }
