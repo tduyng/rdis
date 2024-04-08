@@ -2,7 +2,7 @@ use crate::{
     command::{RedisCommand, RedisCommandInfo},
     database::Database,
     protocol::parser::{parse_message, RedisValue},
-    replication::ReplicaMode,
+    replication::ReplicaInfo,
 };
 use anyhow::{anyhow, Result};
 use bytes::BytesMut;
@@ -11,10 +11,10 @@ use tokio::{
     net::TcpStream,
 };
 
-pub async fn handle_stream(stream: TcpStream, replica_mode: ReplicaMode) -> Result<()> {
+pub async fn handle_stream(stream: TcpStream, replica_info: ReplicaInfo) -> Result<()> {
     println!("Accepted new connection");
 
-    let mut handler = ResponseHandler::new(stream, replica_mode);
+    let mut handler = ResponseHandler::new(stream, replica_info);
 
     loop {
         let value = handler.read_value().await?;
@@ -39,16 +39,16 @@ pub struct ResponseHandler {
     pub stream: TcpStream,
     pub buffer: BytesMut,
     pub database: Database,
-    pub replica_mode: ReplicaMode,
+    pub replica_info: ReplicaInfo,
 }
 
 impl ResponseHandler {
-    fn new(stream: TcpStream, replica_mode: ReplicaMode) -> Self {
+    fn new(stream: TcpStream, replica_info: ReplicaInfo) -> Self {
         ResponseHandler {
             stream,
             buffer: BytesMut::with_capacity(512),
             database: Database::new(),
-            replica_mode,
+            replica_info,
         }
     }
 

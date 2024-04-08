@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 use redis_starter_rust::{
-    replication::{handshake::perform_replica_handshake, ReplicaMode},
+    replication::{handshake::perform_replica_handshake, ReplicaInfo, ReplicaRole},
     stream::handle_stream,
 };
 use tokio::net::TcpListener;
@@ -20,18 +20,23 @@ async fn main() -> Result<()> {
     let listener = TcpListener::bind(format!("127.0.0.1:{}", args.port)).await?;
     println!("Server listening on 127.0.0.1:{}", args.port);
 
-    let mode = match &args.replicaof {
-        None => ReplicaMode::Master,
+    let role = match &args.replicaof {
+        None => ReplicaRole::Master,
         Some(args) => {
             perform_replica_handshake(args).await?;
-            ReplicaMode::Slave
+            ReplicaRole::Slave
         }
+    };
+    let replica_info = ReplicaInfo {
+        role,
+        master_replid: "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb".to_string(),
+        master_repl_offset: 0,
     };
 
     loop {
         match listener.accept().await {
             Ok((stream, _)) => {
-                tokio::spawn(handle_stream(stream, mode.clone()));
+                tokio::spawn(handle_stream(stream, replica_info.clone()));
             }
             Err(e) => {
                 eprintln!("Error accepting connection: {}", e);
