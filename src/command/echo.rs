@@ -3,9 +3,9 @@ use anyhow::{anyhow, Result};
 use tokio::{io::AsyncWriteExt, net::TcpStream};
 
 #[derive(Debug, Clone)]
-pub struct Echo;
+pub struct EchoCommand;
 
-impl Echo {
+impl EchoCommand {
     pub async fn execute(&self, stream: &mut TcpStream, command: &RedisCommand) -> Result<()> {
         if command.args.len() != 1 {
             return Err(anyhow!("ECHO command requires exactly one argument"));

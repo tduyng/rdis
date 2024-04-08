@@ -2,9 +2,9 @@ use anyhow::{anyhow, Result};
 use tokio::{io::AsyncWriteExt, net::TcpStream};
 
 #[derive(Debug, Clone)]
-pub struct Ping;
+pub struct PingCommand;
 
-impl Ping {
+impl PingCommand {
     pub async fn execute(&self, stream: &mut TcpStream) -> Result<()> {
         stream
             .write_all(b"+PONG\r\n")
