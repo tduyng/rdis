@@ -2,7 +2,7 @@ use anyhow::Result;
 use clap::Parser;
 use redis_starter_rust::{
     replication::{handshake::perform_replica_handshake, ReplicaInfo, ReplicaRole},
-    stream::handle_stream,
+    stream::handle_stream, utils::random_sha1_hex,
 };
 use tokio::net::TcpListener;
 
@@ -29,7 +29,7 @@ async fn main() -> Result<()> {
     };
     let replica_info = ReplicaInfo {
         role,
-        master_replid: "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb".to_string(),
+        master_replid: random_sha1_hex(),
         master_repl_offset: 0,
     };
 
