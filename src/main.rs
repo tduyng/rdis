@@ -2,7 +2,7 @@ use anyhow::Result;
 use clap::Parser;
 use redis_starter_rust::{
     command::CommandRegistry,
-    replication::{handshake::perform_handshake, ReplicaMode},
+    replication::{handshake::perform_replica_handshake, ReplicaMode},
     stream::handle_stream,
 };
 use tokio::net::TcpListener;
@@ -24,7 +24,7 @@ async fn main() -> Result<()> {
     let mode = match &args.replicaof {
         None => ReplicaMode::Master,
         Some(args) => {
-            perform_handshake(args).await?;
+            perform_replica_handshake(args).await?;
             ReplicaMode::Slave
         }
     };

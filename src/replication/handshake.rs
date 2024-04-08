@@ -4,7 +4,7 @@ use tokio::{
     net::TcpStream,
 };
 
-pub async fn perform_handshake(args: &[String]) -> Result<()> {
+pub async fn perform_replica_handshake(args: &[String]) -> Result<()> {
     let master_host = &args[0];
     let master_port: u16 = args[1].parse()?;
     let mut stream = TcpStream::connect(format!("{}:{}", master_host, master_port))
@@ -28,7 +28,9 @@ pub async fn perform_handshake(args: &[String]) -> Result<()> {
 
     // Send REPLCONF capa eof capa psync2
     stream
-        .write_all(b"*5\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$3\r\neof\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n")
+        .write_all(
+            b"*5\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$3\r\neof\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n",
+        )
         .await?;
 
     // Receive response to REPLCONF capa eof capa psync2

@@ -1,7 +1,8 @@
 use crate::stream::ResponseHandler;
 
 use self::{
-    echo::EchoCommand, get::GetCommand, info::InfoCommand, ping::PingCommand, set::SetCommand,
+    echo::EchoCommand, get::GetCommand, info::InfoCommand, ping::PingCommand,
+    replconf::ReplConfCommand, set::SetCommand,
 };
 use anyhow::{anyhow, Result};
 
@@ -9,6 +10,7 @@ mod echo;
 mod get;
 mod info;
 mod ping;
+mod replconf;
 mod set;
 
 pub struct RedisCommand {
@@ -23,6 +25,7 @@ pub struct CommandRegistry {
     get_command: GetCommand,
     set_command: SetCommand,
     info_command: InfoCommand,
+    replconf_command: ReplConfCommand,
 }
 
 impl Default for CommandRegistry {
@@ -39,6 +42,7 @@ impl CommandRegistry {
             get_command: GetCommand,
             set_command: SetCommand,
             info_command: InfoCommand,
+            replconf_command: ReplConfCommand,
         }
     }
 
@@ -53,6 +57,7 @@ impl CommandRegistry {
             "get" => self.get_command.execute(handler, command).await,
             "set" => self.set_command.execute(handler, command).await,
             "info" => self.info_command.execute(handler).await,
+            "replconf" => self.replconf_command.execute(handler).await,
             _ => Err(anyhow!("Unknown command: {}", command.name)),
         }
     }
