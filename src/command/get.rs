@@ -1,4 +1,4 @@
-use super::RedisCommand;
+use super::RedisCommandInfo;
 use crate::stream::ResponseHandler;
 use anyhow::Result;
 
@@ -6,11 +6,7 @@ use anyhow::Result;
 pub struct GetCommand;
 
 impl GetCommand {
-    pub async fn execute(
-        &self,
-        handler: &mut ResponseHandler,
-        command: &RedisCommand,
-    ) -> Result<()> {
+    pub async fn execute(handler: &mut ResponseHandler, command: &RedisCommandInfo) -> Result<()> {
         if command.args.len() != 1 {
             return Err(anyhow::anyhow!("GET command requires exactly one argument"));
         }

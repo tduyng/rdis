@@ -1,7 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
 use redis_starter_rust::{
-    command::CommandRegistry,
     replication::{handshake::perform_replica_handshake, ReplicaMode},
     stream::handle_stream,
 };
@@ -29,12 +28,10 @@ async fn main() -> Result<()> {
         }
     };
 
-    let registry = CommandRegistry::new();
-
     loop {
         match listener.accept().await {
             Ok((stream, _)) => {
-                tokio::spawn(handle_stream(stream, registry.clone(), mode.clone()));
+                tokio::spawn(handle_stream(stream, mode.clone()));
             }
             Err(e) => {
                 eprintln!("Error accepting connection: {}", e);

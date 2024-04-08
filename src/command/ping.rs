@@ -5,7 +5,7 @@ use anyhow::Result;
 pub struct PingCommand;
 
 impl PingCommand {
-    pub async fn execute(&self, handler: &mut ResponseHandler) -> Result<()> {
+    pub async fn execute(handler: &mut ResponseHandler) -> Result<()> {
         handler.write_response("+PONG\r\n".to_string()).await?;
         Ok(())
     }

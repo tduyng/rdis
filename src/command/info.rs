@@ -5,7 +5,7 @@ use anyhow::Result;
 pub struct InfoCommand;
 
 impl InfoCommand {
-    pub async fn execute(&self, handler: &mut ResponseHandler) -> Result<()> {
+    pub async fn execute(handler: &mut ResponseHandler) -> Result<()> {
         let mut response = String::new();
 
         match &handler.replica_mode {

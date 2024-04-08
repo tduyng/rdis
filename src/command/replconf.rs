@@ -5,7 +5,7 @@ use anyhow::Result;
 pub struct ReplConfCommand;
 
 impl ReplConfCommand {
-    pub async fn execute(&self, handler: &mut ResponseHandler) -> Result<()> {
+    pub async fn execute(handler: &mut ResponseHandler) -> Result<()> {
         handler.write_response("+OK\r\n".to_string()).await?;
         Ok(())
     }

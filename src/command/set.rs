@@ -1,4 +1,4 @@
-use super::RedisCommand;
+use super::RedisCommandInfo;
 use crate::{stream::ResponseHandler, utils::current_time_ms};
 use anyhow::Result;
 
@@ -6,11 +6,7 @@ use anyhow::Result;
 pub struct SetCommand;
 
 impl SetCommand {
-    pub async fn execute(
-        &self,
-        handler: &mut ResponseHandler,
-        command: &RedisCommand,
-    ) -> Result<()> {
+    pub async fn execute(handler: &mut ResponseHandler, command: &RedisCommandInfo) -> Result<()> {
         if command.args.len() < 2 {
             return Err(anyhow::anyhow!(
                 "SET command requires exactly two arguments"

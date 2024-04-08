@@ -1,5 +1,5 @@
 use crate::{
-    command::{CommandRegistry, RedisCommand},
+    command::{RedisCommand, RedisCommandInfo},
     database::Database,
     protocol::parser::{parse_message, RedisValue},
     replication::ReplicaMode,
@@ -11,11 +11,7 @@ use tokio::{
     net::TcpStream,
 };
 
-pub async fn handle_stream(
-    stream: TcpStream,
-    redis_command: CommandRegistry,
-    replica_mode: ReplicaMode,
-) -> Result<()> {
+pub async fn handle_stream(stream: TcpStream, replica_mode: ReplicaMode) -> Result<()> {
     println!("Accepted new connection");
 
     let mut handler = ResponseHandler::new(stream, replica_mode);
@@ -26,7 +22,7 @@ pub async fn handle_stream(
         let response = match value {
             Some(v) => {
                 let command = parse_command(v)?;
-                redis_command.execute(&mut handler, &command).await
+                RedisCommand::execute(&mut handler, &command).await
             }
             None => break,
         };
@@ -71,12 +67,12 @@ impl ResponseHandler {
     }
 }
 
-fn parse_command(value: RedisValue) -> Result<RedisCommand> {
+fn parse_command(value: RedisValue) -> Result<RedisCommandInfo> {
     match value {
         RedisValue::Array(a) => {
             if let Some(command) = a.first().and_then(|v| unpack_bulk_str(v.clone())) {
                 let args: Vec<String> = a.into_iter().skip(1).filter_map(unpack_bulk_str).collect();
-                Ok(RedisCommand {
+                Ok(RedisCommandInfo {
                     name: command,
                     args,
                 })

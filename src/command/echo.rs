@@ -1,4 +1,4 @@
-use super::RedisCommand;
+use super::RedisCommandInfo;
 use crate::stream::ResponseHandler;
 use anyhow::Result;
 
@@ -6,11 +6,7 @@ use anyhow::Result;
 pub struct EchoCommand;
 
 impl EchoCommand {
-    pub async fn execute(
-        &self,
-        handler: &mut ResponseHandler,
-        command: &RedisCommand,
-    ) -> Result<()> {
+    pub async fn execute(handler: &mut ResponseHandler, command: &RedisCommandInfo) -> Result<()> {
         if command.args.is_empty() {
             return Err(anyhow::anyhow!(
                 "ECHO command requires at least one argument"
