@@ -1,12 +1,9 @@
-use std::{
-    net::{IpAddr, SocketAddr},
-    str::FromStr,
-};
-
 use anyhow::Result;
 use clap::Parser;
 use redis_starter_rust::{
-    command::CommandRegistry, replication::ReplicaMode, stream::handle_stream,
+    command::CommandRegistry,
+    replication::{handshake::perform_handshake, ReplicaMode},
+    stream::handle_stream,
 };
 use tokio::net::TcpListener;
 
@@ -27,14 +24,8 @@ async fn main() -> Result<()> {
     let mode = match &args.replicaof {
         None => ReplicaMode::Master,
         Some(args) => {
-            assert_eq!(args.len(), 2);
-            let addr = if args.first().unwrap() == "localhost" {
-                IpAddr::from_str("127.0.0.1").unwrap()
-            } else {
-                IpAddr::from_str(args.first().unwrap()).unwrap()
-            };
-            let port: u16 = args.get(1).unwrap().clone().parse().unwrap();
-            ReplicaMode::Slave(SocketAddr::new(addr, port))
+            perform_handshake(args).await?;
+            ReplicaMode::Slave
         }
     };
 

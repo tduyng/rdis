@@ -1,7 +1,7 @@
-use std::net::SocketAddr;
+pub mod handshake;
 
 #[derive(Debug, Clone)]
 pub enum ReplicaMode {
     Master,
-    Slave(SocketAddr),
+    Slave,
 }
