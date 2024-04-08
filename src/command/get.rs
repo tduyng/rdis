@@ -11,10 +11,10 @@ impl GetCommand {
         handler: &mut ResponseHandler,
         command: &RedisCommand,
     ) -> Result<()> {
-        if command.args.len() != 2 {
+        if command.args.len() != 1 {
             return Err(anyhow::anyhow!("GET command requires exactly one argument"));
         }
-        let key = &command.args[1];
+        let key = &command.args[0];
 
         if let Some(value) = handler.database.get(key) {
             let response = format!("${}\r\n{}\r\n", value.len(), value);

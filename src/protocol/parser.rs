@@ -14,7 +14,7 @@ impl RedisValue {
         match self {
             RedisValue::SimpleString(s) => format!("+{}\r\n", s),
             RedisValue::BulkString(s) => format!("${}\r\n{}\r\n", s.len(), s),
-            _ => panic!("Unsupported value for serialize"),
+            _ => "".to_string(),
         }
     }
 }
