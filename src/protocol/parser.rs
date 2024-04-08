@@ -8,6 +8,15 @@ pub enum RedisValue {
     Array(Vec<RedisValue>),
 }
 
+impl RedisValue {
+    pub fn simple_string(s: String) -> String {
+        format!("+{}\r\n", s)
+    }
+    pub fn bulk_string(s: String) -> String {
+        format!("${}\r\n{}\r\n", s.len(), s)
+    }
+}
+
 pub fn parse_message(buffer: BytesMut) -> Result<(RedisValue, usize)> {
     match buffer[0] as char {
         '+' => parse_simple_string(buffer),

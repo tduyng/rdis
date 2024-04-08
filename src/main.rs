@@ -6,7 +6,7 @@ use tokio::net::TcpListener;
 #[derive(Parser, Debug)]
 struct Args {
     #[arg(short, long, default_value = "6379")]
-    port: u16
+    port: u16,
 }
 
 #[tokio::main]
