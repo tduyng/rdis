@@ -1,4 +1,4 @@
-use crate::{protocol::parser::RedisValue, replication::ReplicaRole, stream::ResponseHandler};
+use crate::{protocol::parser::RedisValue, replication::StreamType, stream::ResponseHandler};
 use anyhow::Result;
 
 #[derive(Debug, Clone)]
@@ -8,17 +8,17 @@ impl InfoCommand {
     pub async fn execute(handler: &mut ResponseHandler) -> Result<()> {
         let mut response = String::new();
 
-        match &handler.replica_info.role {
-            ReplicaRole::Master => {
-                response += "role:master\r\n";
+        match &handler.replica_info.stream_type {
+            StreamType::Master => {
+                response += "stream_type:master\r\n";
                 response += &format!("master_replid:{}\r\n", handler.replica_info.master_replid);
                 response += &format!(
                     "master_repl_offset:{}\r\n",
                     handler.replica_info.master_repl_offset
                 );
             }
-            ReplicaRole::Slave => {
-                response += "role:slave\r\n";
+            StreamType::Slave => {
+                response += "stream_type:slave\r\n";
             }
         }
 

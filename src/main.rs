@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 use redis_starter_rust::{
-    replication::{handshake::perform_replica_handshake, ReplicaInfo, ReplicaRole},
+    replication::{handshake::perform_replica_handshake, ReplicaInfo, StreamType},
     stream::handle_stream,
     utils::random_sha1_hex,
 };
@@ -21,15 +21,15 @@ async fn main() -> Result<()> {
     let listener = TcpListener::bind(format!("127.0.0.1:{}", args.port)).await?;
     println!("Server listening on 127.0.0.1:{}", args.port);
 
-    let role = match &args.replicaof {
-        None => ReplicaRole::Master,
+    let stream_type = match &args.replicaof {
+        None => StreamType::Master,
         Some(args) => {
             perform_replica_handshake(args).await?;
-            ReplicaRole::Slave
+            StreamType::Slave
         }
     };
     let replica_info = ReplicaInfo {
-        role,
+        stream_type,
         master_replid: random_sha1_hex(),
         master_repl_offset: 0,
     };
