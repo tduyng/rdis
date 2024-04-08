@@ -1,86 +1,111 @@
 use crate::command::RedisCommand;
 use anyhow::{anyhow, Result};
+use bytes::{Buf, BytesMut};
 
-fn parse_simple_string(buffer: &[u8]) -> Result<(usize, String)> {
-    assert!(buffer[0] == b'+');
-    let term = buffer.iter().position(|&x| x == b'\r').unwrap();
-    let value = String::from_utf8(buffer[1..term].to_vec()).unwrap();
-    // +2 to get past the trailing \r\n
-    Ok((term + 2, value))
+#[derive(Clone, Debug)]
+pub enum RedisValue {
+    SimpleString(String),
+    BulkString(String),
+    Array(Vec<RedisValue>),
 }
 
-fn parse_bulk_string(buffer: &[u8]) -> Result<(usize, String)> {
-    assert!(buffer[0] == b'$');
-    let sep = buffer.iter().position(|&x| x == b'\r').unwrap();
-    let string_len = String::from_utf8(buffer[1..sep].to_vec())
-        .unwrap()
-        .parse::<usize>()
-        .unwrap();
-    if string_len == 0 {
-        // Empty string: $0\r\n\r\n -> sep points to first \r, so + 3 to get to the end
-        return Ok((sep + 4, String::new()));
+impl RedisValue {
+    pub fn serialize(&self) -> String {
+        match self {
+            RedisValue::SimpleString(s) => format!("+{}\r\n", s),
+            RedisValue::BulkString(s) => format!("${}\r\n{}\r\n", s.len(), s),
+            RedisValue::Array(vals) => {
+                let serialized_vals: Vec<String> = vals.iter().map(|v| v.serialize()).collect();
+                format!("*{}\r\n{}", vals.len(), serialized_vals.join("\r\n"))
+            }
+        }
     }
-    let string_start = sep + 2; // sep is \r, so +2 to get to the start of the actual string
-    let string_end = string_start + string_len;
-    let value = String::from_utf8(buffer[string_start..string_end].to_vec()).unwrap();
-    // +2 to get past the trailing \r\n
-    Ok((string_end + 2, value))
 }
 
-fn parse_array(buffer: &[u8]) -> Result<(usize, Vec<String>)> {
-    assert!(buffer[0] == b'*');
-    let sep = buffer.iter().position(|&x| x == b'\r').unwrap();
-    let array_length = String::from_utf8(buffer[1..sep].to_vec())
-        .unwrap()
-        .parse::<usize>()
-        .unwrap();
-    let mut pos = sep + 2;
-    let mut params = Vec::<String>::with_capacity(array_length);
+pub fn parse_command(buffer: &mut BytesMut) -> Result<RedisCommand> {
 
-    for _ in 0..array_length {
-        match buffer[pos] {
-            b'$' => {
-                let (bytes, value) = parse_bulk_string(&buffer[pos..])?;
-                params.push(value);
-                pos += bytes;
+    match parse_message(buffer)? {
+        RedisValue::Array(vals) => {
+            let mut args = vec![];
+            for val in vals {
+                if let RedisValue::BulkString(s) = val {
+                    args.push(s);
+                } else {
+                    return Err(anyhow!("Invalid command syntax, expected bulk string"));
+                }
             }
-            b'+' => {
-                let (bytes, value) = parse_simple_string(&buffer[pos..])?;
-                params.push(value);
-                pos += bytes;
+            if args.is_empty() {
+                return Err(anyhow!("Invalid command syntax, expected non-empty array"));
             }
-            _ => {
-                return Err(anyhow!(
-                    "Invalid command syntax, expected bulk string or simple string, got {}",
-                    buffer[pos]
-                ))
-            }
-        };
+            Ok(RedisCommand {
+                name: args[0].clone(),
+                args: args[1..].to_vec(),
+            })
+        }
+        _ => Err(anyhow!("Invalid command syntax, expected array")),
     }
-
-    Ok((pos, params))
 }
 
-pub fn parse_command(buffer: &[u8]) -> Result<RedisCommand> {
-    if buffer.is_empty() {
-        return Err(anyhow!("Empty command"));
+pub fn parse_message(buffer: &mut BytesMut) -> Result<RedisValue> {
+    match buffer[0] as char {
+        '*' => parse_array(buffer),
+        '$' => parse_bulk_string(buffer),
+        '+' => parse_simple_string(buffer),
+        _ => Err(anyhow!("Improper RESP format")),
     }
+}
 
-    if buffer[0] != b'*' {
-        return Err(anyhow!(
-            "Invalid command syntax, expected array, got {}",
-            buffer[0]
-        ));
-    };
-
-    let (_pos, params) = parse_array(buffer)?;
-
-    if params.is_empty() {
-        return Err(anyhow!("Empty command"));
+fn parse_simple_string(buffer: &mut BytesMut) -> Result<RedisValue> {
+    assert_eq!(buffer[0] as char, '+');
+    buffer.advance(1);
+    if let Some((line, len)) = read_until_crlf(buffer) {
+        let string = String::from_utf8(line.to_vec())?;
+        buffer.advance(len);
+        Ok(RedisValue::SimpleString(string))
+    } else {
+        Err(anyhow!("Invalid string"))
     }
+}
 
-    Ok(RedisCommand {
-        name: params[0].clone(),
-        args: params[1..].to_vec(),
-    })
+fn parse_array(buffer: &mut BytesMut) -> Result<RedisValue> {
+    assert_eq!(buffer[0] as char, '*');
+    buffer.advance(1);
+    if let Some((line, len)) = read_until_crlf(buffer) {
+        let array_length: usize = String::from_utf8(line.to_vec())?.parse()?;
+        buffer.advance(len);
+        let mut items = Vec::with_capacity(array_length);
+        for _ in 0..array_length {
+            let item = parse_message(buffer)?;
+            items.push(item);
+        }
+        Ok(RedisValue::Array(items))
+    } else {
+        Err(anyhow!("Invalid array format"))
+    }
+}
+
+fn parse_bulk_string(buffer: &mut BytesMut) -> Result<RedisValue> {
+    assert_eq!(buffer[0] as char, '$');
+    buffer.advance(1);
+    if let Some((line, len)) = read_until_crlf(buffer) {
+        let bulk_str_len: usize = String::from_utf8(line.to_vec())?.parse()?;
+        buffer.advance(len);
+        if buffer.len() < bulk_str_len {
+            return Err(anyhow!("Invalid bulk string"));
+        }
+        let value = String::from_utf8(buffer[..bulk_str_len].to_vec())?;
+        buffer.advance(bulk_str_len + 2); // +2 to skip CRLF
+        Ok(RedisValue::BulkString(value))
+    } else {
+        Err(anyhow!("Invalid bulk string"))
+    }
+}
+
+fn read_until_crlf(buffer: &[u8]) -> Option<(&[u8], usize)> {
+    for i in 1..buffer.len() {
+        if buffer[i - 1] == b'\r' && buffer[i] == b'\n' {
+            return Some((&buffer[0..(i - 1)], i + 1));
+        }
+    }
+    None
 }
