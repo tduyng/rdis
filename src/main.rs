@@ -2,7 +2,8 @@ use anyhow::Result;
 use clap::Parser;
 use redis_starter_rust::{
     replication::{handshake::perform_replica_handshake, ReplicaInfo, ReplicaRole},
-    stream::handle_stream, utils::random_sha1_hex,
+    stream::handle_stream,
+    utils::random_sha1_hex,
 };
 use tokio::net::TcpListener;
 
