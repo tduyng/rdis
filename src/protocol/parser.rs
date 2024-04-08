@@ -15,6 +15,14 @@ impl RedisValue {
     pub fn bulk_string(s: String) -> String {
         format!("${}\r\n{}\r\n", s.len(), s)
     }
+
+    pub fn array_string(s: Vec<String>) -> String {
+        let mut result = format!("*{}\r\n", s.len());
+        for item in s {
+            result.push_str(&format!("${}\r\n{}\r\n", item.len(), item));
+        }
+        result
+    }
 }
 
 pub fn parse_message(buffer: BytesMut) -> Result<(RedisValue, usize)> {
