@@ -1,12 +1,12 @@
-use crate::command::RedisCommand;
 use anyhow::{anyhow, Result};
-use bytes::{Buf, BytesMut};
+use bytes::BytesMut;
 
 #[derive(Clone, Debug)]
 pub enum RedisValue {
     SimpleString(String),
     BulkString(String),
     Array(Vec<RedisValue>),
+    Response(String),
 }
 
 impl RedisValue {
@@ -14,91 +14,60 @@ impl RedisValue {
         match self {
             RedisValue::SimpleString(s) => format!("+{}\r\n", s),
             RedisValue::BulkString(s) => format!("${}\r\n{}\r\n", s.len(), s),
-            RedisValue::Array(vals) => {
-                let serialized_vals: Vec<String> = vals.iter().map(|v| v.serialize()).collect();
-                format!("*{}\r\n{}", vals.len(), serialized_vals.join("\r\n"))
-            }
+            _ => panic!("Unsupported value for serialize"),
         }
     }
 }
 
-pub fn parse_command(buffer: &mut BytesMut) -> Result<RedisCommand> {
-
-    match parse_message(buffer)? {
-        RedisValue::Array(vals) => {
-            let mut args = vec![];
-            for val in vals {
-                if let RedisValue::BulkString(s) = val {
-                    args.push(s);
-                } else {
-                    return Err(anyhow!("Invalid command syntax, expected bulk string"));
-                }
-            }
-            if args.is_empty() {
-                return Err(anyhow!("Invalid command syntax, expected non-empty array"));
-            }
-            Ok(RedisCommand {
-                name: args[0].clone(),
-                args: args[1..].to_vec(),
-            })
-        }
-        _ => Err(anyhow!("Invalid command syntax, expected array")),
-    }
-}
-
-pub fn parse_message(buffer: &mut BytesMut) -> Result<RedisValue> {
+pub fn parse_message(buffer: BytesMut) -> Result<(RedisValue, usize)> {
     match buffer[0] as char {
+        '+' => parse_simple_string(buffer),
         '*' => parse_array(buffer),
         '$' => parse_bulk_string(buffer),
-        '+' => parse_simple_string(buffer),
-        _ => Err(anyhow!("Improper RESP format")),
+        _ => Err(anyhow!("Not a known value type {:?}", buffer)),
     }
 }
 
-fn parse_simple_string(buffer: &mut BytesMut) -> Result<RedisValue> {
-    assert_eq!(buffer[0] as char, '+');
-    buffer.advance(1);
-    if let Some((line, len)) = read_until_crlf(buffer) {
-        let string = String::from_utf8(line.to_vec())?;
-        buffer.advance(len);
-        Ok(RedisValue::SimpleString(string))
-    } else {
-        Err(anyhow!("Invalid string"))
+fn parse_simple_string(buffer: BytesMut) -> Result<(RedisValue, usize)> {
+    if let Some((line, len)) = read_until_crlf(&buffer[1..]) {
+        let string = String::from_utf8(line.to_vec()).unwrap();
+        return Ok((RedisValue::SimpleString(string), len + 1));
     }
+    Err(anyhow!("Invalid string {:?}", buffer))
 }
 
-fn parse_array(buffer: &mut BytesMut) -> Result<RedisValue> {
-    assert_eq!(buffer[0] as char, '*');
-    buffer.advance(1);
-    if let Some((line, len)) = read_until_crlf(buffer) {
-        let array_length: usize = String::from_utf8(line.to_vec())?.parse()?;
-        buffer.advance(len);
-        let mut items = Vec::with_capacity(array_length);
-        for _ in 0..array_length {
-            let item = parse_message(buffer)?;
-            items.push(item);
-        }
-        Ok(RedisValue::Array(items))
-    } else {
-        Err(anyhow!("Invalid array format"))
+fn parse_array(buffer: BytesMut) -> Result<(RedisValue, usize)> {
+    let (array_length, mut bytes_consumed) =
+        if let Some((line, len)) = read_until_crlf(&buffer[1..]) {
+            let array_length = parse_int(line)?;
+            (array_length, len + 1)
+        } else {
+            return Err(anyhow!("Invalid array format {:?}", buffer));
+        };
+    let mut items = vec![];
+    for _ in 0..array_length {
+        let (array_item, len) = parse_message(BytesMut::from(&buffer[bytes_consumed..]))?;
+        items.push(array_item);
+        bytes_consumed += len;
     }
+    Ok((RedisValue::Array(items), bytes_consumed))
 }
 
-fn parse_bulk_string(buffer: &mut BytesMut) -> Result<RedisValue> {
-    assert_eq!(buffer[0] as char, '$');
-    buffer.advance(1);
-    if let Some((line, len)) = read_until_crlf(buffer) {
-        let bulk_str_len: usize = String::from_utf8(line.to_vec())?.parse()?;
-        buffer.advance(len);
-        if buffer.len() < bulk_str_len {
-            return Err(anyhow!("Invalid bulk string"));
-        }
-        let value = String::from_utf8(buffer[..bulk_str_len].to_vec())?;
-        buffer.advance(bulk_str_len + 2); // +2 to skip CRLF
-        Ok(RedisValue::BulkString(value))
+fn parse_bulk_string(buffer: BytesMut) -> Result<(RedisValue, usize)> {
+    let (bulk_str_len, bytes_consumed) = if let Some((line, len)) = read_until_crlf(&buffer[1..]) {
+        let bulk_str_len = parse_int(line)?;
+        (bulk_str_len, len + 1)
     } else {
-        Err(anyhow!("Invalid bulk string"))
-    }
+        return Err(anyhow!("Invalid array format {:?}", buffer));
+    };
+    let end_of_bulk_str = bytes_consumed + bulk_str_len;
+    let total_parsed = end_of_bulk_str + 2;
+    Ok((
+        RedisValue::BulkString(String::from_utf8(
+            buffer[bytes_consumed..end_of_bulk_str].to_vec(),
+        )?),
+        total_parsed,
+    ))
 }
 
 fn read_until_crlf(buffer: &[u8]) -> Option<(&[u8], usize)> {
@@ -108,4 +77,8 @@ fn read_until_crlf(buffer: &[u8]) -> Option<(&[u8], usize)> {
         }
     }
     None
+}
+
+fn parse_int(buffer: &[u8]) -> Result<usize> {
+    Ok(String::from_utf8(buffer.to_vec())?.parse()?)
 }

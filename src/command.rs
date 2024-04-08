@@ -1,8 +1,7 @@
-use crate::database::Database;
+use crate::stream::ResponseHandler;
 
 use self::{echo::EchoCommand, get::GetCommand, ping::PingCommand, set::SetCommand};
 use anyhow::{anyhow, Result};
-use tokio::net::TcpStream;
 
 mod echo;
 mod get;
@@ -40,15 +39,14 @@ impl CommandRegistry {
 
     pub async fn execute(
         &self,
-        stream: &mut TcpStream,
-        database: &mut Database,
+        handler: &mut ResponseHandler,
         command: &RedisCommand,
     ) -> Result<()> {
         match command.name.to_lowercase().as_str() {
-            "ping" => self.ping_command.execute(stream).await,
-            "echo" => self.echo_command.execute(stream, command).await,
-            "get" => self.get_command.execute(stream, database, command).await,
-            "set" => self.set_command.execute(stream, database, command).await,
+            "ping" => self.ping_command.execute(handler).await,
+            "echo" => self.echo_command.execute(handler, command).await,
+            "get" => self.get_command.execute(handler, command).await,
+            "set" => self.set_command.execute(handler, command).await,
             _ => Err(anyhow!("Unknown command: {}", command.name)),
         }
     }

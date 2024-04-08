@@ -1,19 +1,25 @@
 use super::RedisCommand;
-use anyhow::{anyhow, Result};
-use tokio::{io::AsyncWriteExt, net::TcpStream};
+use crate::{protocol::parser::RedisValue, stream::ResponseHandler};
+use anyhow::Result;
 
 #[derive(Debug, Clone)]
 pub struct EchoCommand;
 
 impl EchoCommand {
-    pub async fn execute(&self, stream: &mut TcpStream, command: &RedisCommand) -> Result<()> {
-        if command.args.len() != 1 {
-            return Err(anyhow!("ECHO command requires exactly one argument"));
+    pub async fn execute(
+        &self,
+        handler: &mut ResponseHandler,
+        command: &RedisCommand,
+    ) -> Result<()> {
+        if let Some(arg) = command.args.first() {
+            handler
+                .write_value(RedisValue::BulkString(arg.clone()))
+                .await?;
+        } else {
+            handler
+                .write_value(RedisValue::BulkString("".to_string()))
+                .await?;
         }
-
-        stream
-            .write_all(format!("+{}\r\n", command.args[0]).as_bytes())
-            .await
-            .map_err(|e| anyhow!("Failed to write ECHO response to stream: {}", e))
+        Ok(())
     }
 }

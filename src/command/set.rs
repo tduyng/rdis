@@ -1,8 +1,6 @@
-use crate::database::Database;
-use anyhow::Result;
-use tokio::{io::AsyncWriteExt, net::TcpStream};
-
 use super::RedisCommand;
+use crate::{protocol::parser::RedisValue, stream::ResponseHandler};
+use anyhow::Result;
 
 #[derive(Debug, Clone)]
 pub struct SetCommand;
@@ -10,8 +8,7 @@ pub struct SetCommand;
 impl SetCommand {
     pub async fn execute(
         &self,
-        stream: &mut TcpStream,
-        database: &mut Database,
+        handler: &mut ResponseHandler,
         command: &RedisCommand,
     ) -> Result<()> {
         if command.args.len() != 3 {
@@ -21,8 +18,10 @@ impl SetCommand {
         }
         let key = command.args[1].clone();
         let value = command.args[2].clone();
-        database.set(key, value);
-        stream.write_all(b"+Ok\r\n").await?;
+        handler.database.set(key, value);
+        handler
+            .write_value(RedisValue::SimpleString("Ok".to_string()))
+            .await?;
         Ok(())
     }
 }

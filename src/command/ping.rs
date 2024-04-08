@@ -1,14 +1,14 @@
-use anyhow::{anyhow, Result};
-use tokio::{io::AsyncWriteExt, net::TcpStream};
+use crate::{protocol::parser::RedisValue, stream::ResponseHandler};
+use anyhow::Result;
 
 #[derive(Debug, Clone)]
 pub struct PingCommand;
 
 impl PingCommand {
-    pub async fn execute(&self, stream: &mut TcpStream) -> Result<()> {
-        stream
-            .write_all(b"+PONG\r\n")
-            .await
-            .map_err(|e| anyhow!("Failed to write PONG response to stream: {}", e))
+    pub async fn execute(&self, handler: &mut ResponseHandler) -> Result<()> {
+        handler
+            .write_value(RedisValue::SimpleString("PONG".to_string()))
+            .await?;
+        Ok(())
     }
 }
