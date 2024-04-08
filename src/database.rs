@@ -1,9 +1,15 @@
-use std::collections::HashMap;
-
 use crate::utils::current_time_ms;
+use lazy_static::lazy_static;
+use std::collections::HashMap;
+use tokio::sync::Mutex;
 
+#[derive(Debug, Clone)]
 pub struct Database {
     data: HashMap<String, (String, u128)>,
+}
+
+lazy_static! {
+    pub static ref DATABASE: Mutex<Option<Database>> = Mutex::new(Some(Database::new()));
 }
 
 impl Default for Database {
@@ -13,9 +19,19 @@ impl Default for Database {
 }
 
 impl Database {
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self {
             data: HashMap::new(),
+        }
+    }
+
+    pub async fn instance() -> Database {
+        if let Some(instance) = DATABASE.lock().await.clone() {
+            instance
+        } else {
+            let new_instance = Database::new();
+            *DATABASE.lock().await = Some(new_instance.clone());
+            new_instance
         }
     }
 
