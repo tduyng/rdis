@@ -1,11 +1,19 @@
 use anyhow::Result;
+use clap::Parser;
 use redis_starter_rust::{command::CommandRegistry, stream::handle_stream};
 use tokio::net::TcpListener;
 
+#[derive(Parser, Debug)]
+struct Args {
+    #[arg(short, long, default_value = "6379")]
+    port: u16
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
-    let listener = TcpListener::bind("127.0.0.1:6379").await?;
-    println!("Server listening on 127.0.0.1:6379");
+    let args = Args::parse();
+    let listener = TcpListener::bind(format!("127.0.0.1:{}", args.port)).await?;
+    println!("Server listening on 127.0.0.1:{}", args.port);
 
     let registry = CommandRegistry::new();
 
