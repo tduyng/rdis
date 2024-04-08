@@ -27,14 +27,8 @@ fn parse_bulk_string(buffer: &[u8]) -> Result<(usize, String)> {
     Ok((string_end + 2, value))
 }
 
-pub fn parse_command(buffer: &[u8]) -> Result<RedisCommand> {
-    if buffer[0] != b'*' {
-        return Err(anyhow!(
-            "Invalid command syntax, expected array, got {}",
-            buffer[0]
-        ));
-    };
-
+fn parse_array(buffer: &[u8]) -> Result<(usize, Vec<String>)> {
+    assert!(buffer[0] == b'*');
     let sep = buffer.iter().position(|&x| x == b'\r').unwrap();
     let array_length = String::from_utf8(buffer[1..sep].to_vec())
         .unwrap()
@@ -57,11 +51,32 @@ pub fn parse_command(buffer: &[u8]) -> Result<RedisCommand> {
             }
             _ => {
                 return Err(anyhow!(
-                    "Invalid command syntax, expected bulk string, got {}",
+                    "Invalid command syntax, expected bulk string or simple string, got {}",
                     buffer[pos]
                 ))
             }
         };
+    }
+
+    Ok((pos, params))
+}
+
+pub fn parse_command(buffer: &[u8]) -> Result<RedisCommand> {
+    if buffer.is_empty() {
+        return Err(anyhow!("Empty command"));
+    }
+
+    if buffer[0] != b'*' {
+        return Err(anyhow!(
+            "Invalid command syntax, expected array, got {}",
+            buffer[0]
+        ));
+    };
+
+    let (_pos, params) = parse_array(buffer)?;
+
+    if params.is_empty() {
+        return Err(anyhow!("Empty command"));
     }
 
     Ok(RedisCommand {
