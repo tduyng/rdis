@@ -1,7 +1,7 @@
 use crate::stream::ResponseHandler;
 
 use self::{
-    echo::EchoCommand, get::GetCommand, info::InfoCommand, ping::PingCommand,
+    echo::EchoCommand, get::GetCommand, info::InfoCommand, ping::PingCommand, psync::PsyncCommand,
     replconf::ReplConfCommand, set::SetCommand,
 };
 use anyhow::{anyhow, Result};
@@ -10,6 +10,7 @@ mod echo;
 mod get;
 mod info;
 mod ping;
+mod psync;
 mod replconf;
 mod set;
 
@@ -26,6 +27,7 @@ pub struct CommandRegistry {
     set_command: SetCommand,
     info_command: InfoCommand,
     replconf_command: ReplConfCommand,
+    psync_command: PsyncCommand,
 }
 
 impl Default for CommandRegistry {
@@ -43,6 +45,7 @@ impl CommandRegistry {
             set_command: SetCommand,
             info_command: InfoCommand,
             replconf_command: ReplConfCommand,
+            psync_command: PsyncCommand,
         }
     }
 
@@ -58,6 +61,7 @@ impl CommandRegistry {
             "set" => self.set_command.execute(handler, command).await,
             "info" => self.info_command.execute(handler).await,
             "replconf" => self.replconf_command.execute(handler).await,
+            "psync" => self.psync_command.execute(handler).await,
             _ => Err(anyhow!("Unknown command: {}", command.name)),
         }
     }
