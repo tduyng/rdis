@@ -1,5 +1,5 @@
 use super::RedisCommand;
-use crate::{protocol::parser::RedisValue, stream::ResponseHandler};
+use crate::stream::ResponseHandler;
 use anyhow::Result;
 
 #[derive(Debug, Clone)]
@@ -18,11 +18,9 @@ impl GetCommand {
 
         if let Some(value) = handler.database.get(key) {
             let response = format!("${}\r\n{}\r\n", value.len(), value);
-            handler.write_value(RedisValue::Response(response)).await?;
+            handler.write_response(response).await?;
         } else {
-            handler
-                .write_value(RedisValue::Response("$-1\r\n".to_string()))
-                .await?;
+            handler.write_response("$-1\r\n".to_string()).await?;
         }
         Ok(())
     }

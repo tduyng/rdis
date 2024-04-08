@@ -1,5 +1,5 @@
 use super::RedisCommand;
-use crate::{protocol::parser::RedisValue, stream::ResponseHandler};
+use crate::stream::ResponseHandler;
 use anyhow::Result;
 
 #[derive(Debug, Clone)]
@@ -11,15 +11,13 @@ impl EchoCommand {
         handler: &mut ResponseHandler,
         command: &RedisCommand,
     ) -> Result<()> {
-        if let Some(arg) = command.args.first() {
-            handler
-                .write_value(RedisValue::BulkString(arg.clone()))
-                .await?;
-        } else {
-            handler
-                .write_value(RedisValue::BulkString("".to_string()))
-                .await?;
+        if command.args.is_empty() {
+            return Err(anyhow::anyhow!(
+                "ECHO command requires at least one argument"
+            ));
         }
+        let message = command.args.join(" ");
+        handler.write_response(format!("+{}\r\n", message)).await?;
         Ok(())
     }
 }

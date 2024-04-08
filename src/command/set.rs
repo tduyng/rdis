@@ -1,5 +1,5 @@
 use super::RedisCommand;
-use crate::{protocol::parser::RedisValue, stream::ResponseHandler};
+use crate::stream::ResponseHandler;
 use anyhow::Result;
 
 #[derive(Debug, Clone)]
@@ -19,9 +19,7 @@ impl SetCommand {
         let key = command.args[0].clone();
         let value = command.args[1].clone();
         handler.database.set(key, value);
-        handler
-            .write_value(RedisValue::SimpleString("OK".to_string())) // Respond with "OK" upon successful execution
-            .await?;
+        handler.write_response("+OK\r\n".to_string()).await?;
         Ok(())
     }
 }

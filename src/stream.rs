@@ -58,8 +58,8 @@ impl ResponseHandler {
         Ok(Some(v))
     }
 
-    pub async fn write_value(&mut self, value: RedisValue) -> Result<()> {
-        self.stream.write_all(value.serialize().as_bytes()).await?;
+    pub async fn write_response(&mut self, response: String) -> Result<()> {
+        self.stream.write_all(response.as_bytes()).await?;
         Ok(())
     }
 }

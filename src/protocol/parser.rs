@@ -6,17 +6,6 @@ pub enum RedisValue {
     SimpleString(String),
     BulkString(String),
     Array(Vec<RedisValue>),
-    Response(String),
-}
-
-impl RedisValue {
-    pub fn serialize(&self) -> String {
-        match self {
-            RedisValue::SimpleString(s) => format!("+{}\r\n", s),
-            RedisValue::BulkString(s) => format!("${}\r\n{}\r\n", s.len(), s),
-            _ => "".to_string(),
-        }
-    }
 }
 
 pub fn parse_message(buffer: BytesMut) -> Result<(RedisValue, usize)> {
