@@ -8,9 +8,9 @@ impl InfoCommand {
     pub async fn execute(handler: &mut ResponseHandler) -> Result<()> {
         let mut response = String::new();
 
-        match &handler.replica_info.stream_type {
+        match &handler.replica_info.role {
             StreamType::Master => {
-                response += "stream_type:master\r\n";
+                response += "role:master\r\n";
                 response += &format!("master_replid:{}\r\n", handler.replica_info.master_replid);
                 response += &format!(
                     "master_repl_offset:{}\r\n",
@@ -18,7 +18,7 @@ impl InfoCommand {
                 );
             }
             StreamType::Slave => {
-                response += "stream_type:slave\r\n";
+                response += "role:slave\r\n";
             }
         }
 

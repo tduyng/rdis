@@ -8,7 +8,7 @@ pub enum StreamType {
 
 #[derive(Debug, Clone)]
 pub struct ReplicaInfo {
-    pub stream_type: StreamType,
+    pub role: StreamType,
     pub master_replid: String,
     pub master_repl_offset: u16,
 }

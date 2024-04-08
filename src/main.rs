@@ -21,7 +21,7 @@ async fn main() -> Result<()> {
     let listener = TcpListener::bind(format!("127.0.0.1:{}", args.port)).await?;
     println!("Server listening on 127.0.0.1:{}", args.port);
 
-    let stream_type = match &args.replicaof {
+    let role = match &args.replicaof {
         None => StreamType::Master,
         Some(args) => {
             perform_replica_handshake(args).await?;
@@ -29,7 +29,7 @@ async fn main() -> Result<()> {
         }
     };
     let replica_info = ReplicaInfo {
-        stream_type,
+        role,
         master_replid: random_sha1_hex(),
         master_repl_offset: 0,
     };

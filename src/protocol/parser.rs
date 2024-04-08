@@ -16,10 +16,10 @@ impl RedisValue {
         format!("${}\r\n{}\r\n", s.len(), s)
     }
 
-    pub fn array_string(s: Vec<String>) -> String {
-        let mut result = format!("*{}\r\n", s.len());
-        for item in s {
-            result.push_str(&format!("${}\r\n{}\r\n", item.len(), item));
+    pub fn array_string(args: Vec<&str>) -> String {
+        let mut result = format!("*{}\r\n", args.len());
+        for arg in args {
+            result.push_str(&RedisValue::bulk_string(arg.to_string()));
         }
         result
     }
