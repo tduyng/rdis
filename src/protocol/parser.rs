@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use bytes::BytesMut;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum RespValue {
     SimpleString(String),
     BulkString(String),
