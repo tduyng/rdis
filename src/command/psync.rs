@@ -1,6 +1,6 @@
 use crate::{
     protocol::{parser::RespValue, rdb::Rdb},
-    stream::ResponseHandler,
+    stream::RespHandler,
 };
 use anyhow::Result;
 use tokio::io::AsyncWriteExt;
@@ -9,7 +9,7 @@ use tokio::io::AsyncWriteExt;
 pub struct PsyncCommand;
 
 impl PsyncCommand {
-    pub async fn execute(handler: &mut ResponseHandler) -> Result<()> {
+    pub async fn execute(handler: &mut RespHandler) -> Result<()> {
         let full_resync = RespValue::SimpleString(format!(
             "FULLRESYNC {} 0",
             handler.replica_info.master_replid

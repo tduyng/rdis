@@ -1,12 +1,12 @@
 use super::RedisCommandInfo;
-use crate::{protocol::parser::RespValue, stream::ResponseHandler, utils::current_time_ms};
+use crate::{protocol::parser::RespValue, stream::RespHandler, utils::current_time_ms};
 use anyhow::Result;
 
 #[derive(Debug, Clone)]
 pub struct SetCommand;
 
 impl SetCommand {
-    pub async fn execute(handler: &mut ResponseHandler, command: &RedisCommandInfo) -> Result<()> {
+    pub async fn execute(handler: &mut RespHandler, command: &RedisCommandInfo) -> Result<()> {
         if command.args.len() < 2 {
             return Err(anyhow::anyhow!(
                 "SET command requires exactly two arguments"
@@ -20,7 +20,7 @@ impl SetCommand {
         }
     }
 
-    async fn execute_set(handler: &mut ResponseHandler, command: &RedisCommandInfo) -> Result<()> {
+    async fn execute_set(handler: &mut RespHandler, command: &RedisCommandInfo) -> Result<()> {
         let key = command.args[0].clone();
         let value = command.args[1].clone();
 
@@ -32,7 +32,7 @@ impl SetCommand {
     }
 
     async fn execute_with_expiry(
-        handler: &mut ResponseHandler,
+        handler: &mut RespHandler,
         command: &RedisCommandInfo,
     ) -> Result<()> {
         let key = command.args[0].clone();

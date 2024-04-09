@@ -1,11 +1,11 @@
-use crate::{protocol::parser::RespValue, replication::StreamType, stream::ResponseHandler};
+use crate::{protocol::parser::RespValue, replication::StreamType, stream::RespHandler};
 use anyhow::Result;
 
 #[derive(Debug, Clone)]
 pub struct InfoCommand;
 
 impl InfoCommand {
-    pub async fn execute(handler: &mut ResponseHandler) -> Result<()> {
+    pub async fn execute(handler: &mut RespHandler) -> Result<()> {
         let mut response = String::new();
 
         match &handler.replica_info.role {

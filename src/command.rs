@@ -1,4 +1,4 @@
-use crate::stream::ResponseHandler;
+use crate::stream::RespHandler;
 
 use self::{
     echo::EchoCommand, get::GetCommand, info::InfoCommand, ping::PingCommand, psync::PsyncCommand,
@@ -23,7 +23,7 @@ pub struct RedisCommandInfo {
 pub struct RedisCommand {}
 
 impl RedisCommand {
-    pub async fn execute(handler: &mut ResponseHandler, command: &RedisCommandInfo) -> Result<()> {
+    pub async fn execute(handler: &mut RespHandler, command: &RedisCommandInfo) -> Result<()> {
         match command.name.to_lowercase().as_str() {
             "ping" => PingCommand::execute(handler).await,
             "echo" => EchoCommand::execute(handler, command).await,

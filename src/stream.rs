@@ -14,7 +14,7 @@ use tokio::{
 pub async fn handle_stream(stream: TcpStream, replica_info: ReplicaInfo) -> Result<()> {
     println!("Accepted new connection");
 
-    let mut handler = ResponseHandler::new(stream, replica_info).await;
+    let mut handler = RespHandler::new(stream, replica_info).await;
 
     loop {
         let value = handler.read_value().await?;
@@ -35,17 +35,17 @@ pub async fn handle_stream(stream: TcpStream, replica_info: ReplicaInfo) -> Resu
     Ok(())
 }
 
-pub struct ResponseHandler {
+pub struct RespHandler {
     pub stream: TcpStream,
     pub buffer: BytesMut,
     pub database: Database,
     pub replica_info: ReplicaInfo,
 }
 
-impl ResponseHandler {
+impl RespHandler {
     pub async fn new(stream: TcpStream, replica_info: ReplicaInfo) -> Self {
         let database = Database::instance().await;
-        ResponseHandler {
+        RespHandler {
             stream,
             buffer: BytesMut::with_capacity(512),
             database,
