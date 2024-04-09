@@ -8,9 +8,11 @@ use tokio::{
 pub async fn perform_replica_handshake(args: &[String]) -> Result<()> {
     let master_host = &args[0];
     let master_port: u16 = args[1].parse()?;
-    let mut stream = TcpStream::connect(format!("{}:{}", master_host, master_port))
+    let address = format!("{}:{}", master_host, master_port);
+    let mut stream = TcpStream::connect(address)
         .await
         .map_err(|e| anyhow!("Failed to connect to master: {}", e))?;
+    println!("Replica running on {}:{}", master_host, master_port);
 
     // Send PING command
     let ping_command = RespValue::encode_array_str(vec!["PING"]);

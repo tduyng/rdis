@@ -143,26 +143,34 @@ fn encode_array_command(command: &RedisCommandInfo) -> Vec<RespValue> {
     array_values
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_is_write_command_write() {
-        let command = RedisCommandInfo { name: String::from("SET"), args: vec![] };
+        let command = RedisCommandInfo {
+            name: String::from("SET"),
+            args: vec![],
+        };
         assert_eq!(is_write_command(&command), true);
     }
 
     #[test]
     fn test_is_write_command_not_write() {
-        let command = RedisCommandInfo { name: String::from("GET"), args: vec![] };
+        let command = RedisCommandInfo {
+            name: String::from("GET"),
+            args: vec![],
+        };
         assert_eq!(is_write_command(&command), false);
     }
 
     #[test]
     fn test_is_write_command_case_insensitive() {
-        let command = RedisCommandInfo { name: String::from("DeL"), args: vec![] };
+        let command = RedisCommandInfo {
+            name: String::from("DeL"),
+            args: vec![],
+        };
         assert_eq!(is_write_command(&command), true);
     }
 
@@ -177,7 +185,10 @@ mod tests {
         assert!(result.is_ok());
         let command_info = result.unwrap();
         assert_eq!(command_info.name, "SET");
-        assert_eq!(command_info.args, vec!["key".to_string(), "value".to_string()]);
+        assert_eq!(
+            command_info.args,
+            vec!["key".to_string(), "value".to_string()]
+        );
     }
 
     #[test]
