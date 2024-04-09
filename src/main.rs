@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Parser;
 use redis_starter_rust::{
     replication::{handshake::perform_replica_handshake, ReplicaInfo, StreamType},
@@ -18,13 +18,17 @@ struct Args {
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
-    let listener = TcpListener::bind(format!("127.0.0.1:{}", args.port)).await?;
+    let listener = TcpListener::bind(format!("127.0.0.1:{}", args.port))
+        .await
+        .context("Failed to bind to address")?;
     println!("Server listening on 127.0.0.1:{}", args.port);
 
     let role = match &args.replica {
         None => StreamType::Master,
         Some(args) => {
-            perform_replica_handshake(args).await?;
+            perform_replica_handshake(args)
+                .await
+                .context("Failed to perform replica handshake")?;
             StreamType::Slave
         }
     };
@@ -35,20 +39,16 @@ async fn main() -> Result<()> {
     };
 
     loop {
-        match listener.accept().await {
-            Ok((stream, _)) => match replica_info.role {
-                StreamType::Master => {
-                    tokio::spawn(RespHandler::handle_stream(stream, replica_info.clone()));
-                }
-                StreamType::Slave => {
-                    tokio::spawn(RespHandler::handle_replication(
-                        stream,
-                        replica_info.clone(),
-                    ));
-                }
-            },
-            Err(e) => {
-                eprintln!("Error accepting connection: {}", e);
+        let (stream, _) = listener
+            .accept()
+            .await
+            .context("Failed to accept incoming connection")?;
+        match replica_info.role {
+            StreamType::Master => {
+                tokio::spawn(RespHandler::handle_stream(stream, replica_info.clone()));
+            }
+            StreamType::Slave => {
+                tokio::spawn(RespHandler::handle_replication(stream, replica_info.clone()));
             }
         }
     }
