@@ -11,10 +11,10 @@ impl InfoCommand {
         match &handler.replica_info.role {
             StreamType::Master => {
                 response += "role:master\r\n";
-                response += &format!("master_replid:{}\r\n", handler.replica_info.master_replid);
+                response += &format!("master_replid:{}\r\n", handler.replica_info.repl_id);
                 response += &format!(
                     "master_repl_offset:{}\r\n",
-                    handler.replica_info.master_repl_offset
+                    handler.replica_info.repl_offset
                 );
             }
             StreamType::Slave => {

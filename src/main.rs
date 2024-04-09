@@ -9,9 +9,9 @@ use tokio::net::TcpListener;
 
 #[derive(Parser, Debug)]
 struct Args {
-    #[arg(short, long, default_value = "6379")]
+    #[clap(short, long, default_value = "6379")]
     port: u16,
-    #[arg(short,long = "replicaof", value_names = &["MASTER_HOST", "MASTER_PORT"], num_args = 2)]
+    #[clap(short, long = "replicaof", value_names = &["MASTER_HOST", "MASTER_PORT"], num_args = 2)]
     replica: Option<Vec<String>>,
 }
 
@@ -30,15 +30,23 @@ async fn main() -> Result<()> {
     };
     let replica_info = ReplicaInfo {
         role,
-        master_replid: random_sha1_hex(),
-        master_repl_offset: 0,
+        repl_id: random_sha1_hex(),
+        repl_offset: 0,
     };
 
     loop {
         match listener.accept().await {
-            Ok((stream, _)) => {
-                tokio::spawn(RespHandler::handle_stream(stream, replica_info.clone()));
-            }
+            Ok((stream, _)) => match replica_info.role {
+                StreamType::Master => {
+                    tokio::spawn(RespHandler::handle_stream(stream, replica_info.clone()));
+                }
+                StreamType::Slave => {
+                    tokio::spawn(RespHandler::handle_replication(
+                        stream,
+                        replica_info.clone(),
+                    ));
+                }
+            },
             Err(e) => {
                 eprintln!("Error accepting connection: {}", e);
             }
