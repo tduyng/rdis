@@ -1,4 +1,4 @@
-use crate::{protocol::parser::RedisValue, replication::StreamType, stream::ResponseHandler};
+use crate::{protocol::parser::RespValue, replication::StreamType, stream::ResponseHandler};
 use anyhow::Result;
 
 #[derive(Debug, Clone)]
@@ -23,7 +23,7 @@ impl InfoCommand {
         }
 
         handler
-            .write_response(RedisValue::bulk_string(response))
+            .write_response(RespValue::BulkString(response).encode())
             .await?;
         Ok(())
     }

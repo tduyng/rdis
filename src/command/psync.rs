@@ -1,5 +1,5 @@
 use crate::{
-    protocol::{parser::RedisValue, rdb::Rdb},
+    protocol::{parser::RespValue, rdb::Rdb},
     stream::ResponseHandler,
 };
 use anyhow::Result;
@@ -10,10 +10,11 @@ pub struct PsyncCommand;
 
 impl PsyncCommand {
     pub async fn execute(handler: &mut ResponseHandler) -> Result<()> {
-        let full_resync = RedisValue::simple_string(format!(
+        let full_resync = RespValue::SimpleString(format!(
             "FULLRESYNC {} 0",
             handler.replica_info.master_replid
-        ));
+        ))
+        .encode();
         handler.write_response(full_resync).await?;
 
         let empty_rdb = Rdb::get_empty();

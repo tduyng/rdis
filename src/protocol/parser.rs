@@ -2,47 +2,58 @@ use anyhow::{anyhow, Result};
 use bytes::BytesMut;
 
 #[derive(Clone, Debug)]
-pub enum RedisValue {
+pub enum RespValue {
     SimpleString(String),
     BulkString(String),
-    Array(Vec<RedisValue>),
+    Array(Vec<RespValue>),
 }
 
-impl RedisValue {
-    pub fn simple_string(s: String) -> String {
-        format!("+{}\r\n", s)
-    }
-    pub fn bulk_string(s: String) -> String {
-        format!("${}\r\n{}\r\n", s.len(), s)
+impl RespValue {
+    pub fn decode(buffer: BytesMut) -> Result<(RespValue, usize)> {
+        match buffer[0] as char {
+            '+' => parse_simple_string(buffer),
+            '*' => parse_array(buffer),
+            '$' => parse_bulk_string(buffer),
+            _ => Err(anyhow!("Not a known value type {:?}", buffer)),
+        }
     }
 
-    pub fn array_string(args: Vec<&str>) -> String {
-        let mut result = format!("*{}\r\n", args.len());
-        for arg in args {
-            result.push_str(&RedisValue::bulk_string(arg.to_string()));
+    pub fn encode(&self) -> String {
+        match self {
+            RespValue::SimpleString(value) => {
+                format!("+{}\r\n", value)
+            }
+            RespValue::BulkString(value) => {
+                format!("${}\r\n{}\r\n", value.chars().count(), value)
+            }
+            RespValue::Array(values) => {
+                let mut result = format!("*{}\r\n", values.len());
+                for value in values {
+                    result.push_str(&value.encode());
+                }
+                result
+            }
+        }
+    }
+
+    pub fn encode_array_str(values: Vec<&str>) -> String {
+        let mut result = format!("*{}\r\n", values.len());
+        for value in values {
+            result.push_str(&RespValue::BulkString(value.to_string()).encode());
         }
         result
     }
 }
 
-pub fn parse_message(buffer: BytesMut) -> Result<(RedisValue, usize)> {
-    match buffer[0] as char {
-        '+' => parse_simple_string(buffer),
-        '*' => parse_array(buffer),
-        '$' => parse_bulk_string(buffer),
-        _ => Err(anyhow!("Not a known value type {:?}", buffer)),
-    }
-}
-
-fn parse_simple_string(buffer: BytesMut) -> Result<(RedisValue, usize)> {
+fn parse_simple_string(buffer: BytesMut) -> Result<(RespValue, usize)> {
     if let Some((line, len)) = read_until_crlf(&buffer[1..]) {
         let string = String::from_utf8(line.to_vec()).unwrap();
-        return Ok((RedisValue::SimpleString(string), len + 1));
+        return Ok((RespValue::SimpleString(string), len + 1));
     }
     Err(anyhow!("Invalid string {:?}", buffer))
 }
 
-fn parse_array(buffer: BytesMut) -> Result<(RedisValue, usize)> {
+fn parse_array(buffer: BytesMut) -> Result<(RespValue, usize)> {
     let (array_length, mut bytes_consumed) =
         if let Some((line, len)) = read_until_crlf(&buffer[1..]) {
             let array_length = parse_int(line)?;
@@ -52,14 +63,14 @@ fn parse_array(buffer: BytesMut) -> Result<(RedisValue, usize)> {
         };
     let mut items = vec![];
     for _ in 0..array_length {
-        let (array_item, len) = parse_message(BytesMut::from(&buffer[bytes_consumed..]))?;
+        let (array_item, len) = RespValue::decode(BytesMut::from(&buffer[bytes_consumed..]))?;
         items.push(array_item);
         bytes_consumed += len;
     }
-    Ok((RedisValue::Array(items), bytes_consumed))
+    Ok((RespValue::Array(items), bytes_consumed))
 }
 
-fn parse_bulk_string(buffer: BytesMut) -> Result<(RedisValue, usize)> {
+fn parse_bulk_string(buffer: BytesMut) -> Result<(RespValue, usize)> {
     let (bulk_str_len, bytes_consumed) = if let Some((line, len)) = read_until_crlf(&buffer[1..]) {
         let bulk_str_len = parse_int(line)?;
         (bulk_str_len, len + 1)
@@ -69,7 +80,7 @@ fn parse_bulk_string(buffer: BytesMut) -> Result<(RedisValue, usize)> {
     let end_of_bulk_str = bytes_consumed + bulk_str_len;
     let total_parsed = end_of_bulk_str + 2;
     Ok((
-        RedisValue::BulkString(String::from_utf8(
+        RespValue::BulkString(String::from_utf8(
             buffer[bytes_consumed..end_of_bulk_str].to_vec(),
         )?),
         total_parsed,

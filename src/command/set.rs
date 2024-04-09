@@ -1,5 +1,5 @@
 use super::RedisCommandInfo;
-use crate::{protocol::parser::RedisValue, stream::ResponseHandler, utils::current_time_ms};
+use crate::{protocol::parser::RespValue, stream::ResponseHandler, utils::current_time_ms};
 use anyhow::Result;
 
 #[derive(Debug, Clone)]
@@ -26,7 +26,7 @@ impl SetCommand {
 
         handler.database.set(key, value);
         handler
-            .write_response(RedisValue::simple_string("OK".to_string()))
+            .write_response(RespValue::SimpleString("OK".to_string()).encode())
             .await?;
         Ok(())
     }
@@ -49,7 +49,7 @@ impl SetCommand {
                     let expiry_time_ms = current_time_ms + expiry_ms;
                     handler.database.set_with_expiry(key, value, expiry_time_ms);
                     handler
-                        .write_response(RedisValue::simple_string("OK".to_string()))
+                        .write_response(RespValue::SimpleString("OK".to_string()).encode())
                         .await?;
                     return Ok(());
                 }

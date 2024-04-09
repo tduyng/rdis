@@ -1,7 +1,7 @@
 use crate::{
     command::{RedisCommand, RedisCommandInfo},
     database::Database,
-    protocol::parser::{parse_message, RedisValue},
+    protocol::parser::RespValue,
     replication::ReplicaInfo,
 };
 use anyhow::{anyhow, Result};
@@ -53,12 +53,12 @@ impl ResponseHandler {
         }
     }
 
-    pub async fn read_value(&mut self) -> Result<Option<RedisValue>> {
+    pub async fn read_value(&mut self) -> Result<Option<RespValue>> {
         let bytes_read = self.stream.read_buf(&mut self.buffer).await?;
         if bytes_read == 0 {
             return Ok(None);
         }
-        let (v, _) = parse_message(self.buffer.split())?;
+        let (v, _) = RespValue::decode(self.buffer.split())?;
         Ok(Some(v))
     }
 
@@ -68,9 +68,9 @@ impl ResponseHandler {
     }
 }
 
-fn parse_command(value: RedisValue) -> Result<RedisCommandInfo> {
+fn parse_command(value: RespValue) -> Result<RedisCommandInfo> {
     match value {
-        RedisValue::Array(a) => {
+        RespValue::Array(a) => {
             if let Some(command) = a.first().and_then(|v| unpack_bulk_str(v.clone())) {
                 let args: Vec<String> = a.into_iter().skip(1).filter_map(unpack_bulk_str).collect();
                 Ok(RedisCommandInfo {
@@ -85,9 +85,9 @@ fn parse_command(value: RedisValue) -> Result<RedisCommandInfo> {
     }
 }
 
-fn unpack_bulk_str(value: RedisValue) -> Option<String> {
+fn unpack_bulk_str(value: RespValue) -> Option<String> {
     match value {
-        RedisValue::BulkString(s) => Some(s),
+        RespValue::BulkString(s) => Some(s),
         _ => None,
     }
 }
