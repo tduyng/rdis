@@ -2,7 +2,7 @@ use anyhow::Result;
 use clap::Parser;
 use redis_starter_rust::{
     replication::{handshake::perform_replica_handshake, ReplicaInfo, StreamType},
-    stream::handle_stream,
+    stream::RespHandler,
     utils::random_sha1_hex,
 };
 use tokio::net::TcpListener;
@@ -37,7 +37,7 @@ async fn main() -> Result<()> {
     loop {
         match listener.accept().await {
             Ok((stream, _)) => {
-                tokio::spawn(handle_stream(stream, replica_info.clone()));
+                tokio::spawn(RespHandler::handle_stream(stream, replica_info.clone()));
             }
             Err(e) => {
                 eprintln!("Error accepting connection: {}", e);
