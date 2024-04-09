@@ -31,11 +31,18 @@ impl SetCommand {
         Ok(())
     }
 
-    async fn execute_with_expiry(handler: &mut ResponseHandler, command: &RedisCommandInfo) -> Result<()> {
+    async fn execute_with_expiry(
+        handler: &mut ResponseHandler,
+        command: &RedisCommandInfo,
+    ) -> Result<()> {
         let key = command.args[0].clone();
         let value = command.args[1].clone();
 
-        if let Some(px_index) = command.args.iter().position(|arg| arg.to_lowercase() == "px") {
+        if let Some(px_index) = command
+            .args
+            .iter()
+            .position(|arg| arg.to_lowercase() == "px")
+        {
             if px_index + 1 < command.args.len() {
                 if let Ok(expiry_ms) = command.args[px_index + 1].parse::<u128>() {
                     let current_time_ms = current_time_ms();
