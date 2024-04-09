@@ -12,15 +12,30 @@ impl SetCommand {
                 "SET command requires exactly two arguments"
             ));
         }
+
+        if command_contains_px_argument(command) {
+            Self::execute_with_expiry(handler, command).await
+        } else {
+            Self::execute_set(handler, command).await
+        }
+    }
+
+    async fn execute_set(handler: &mut ResponseHandler, command: &RedisCommandInfo) -> Result<()> {
         let key = command.args[0].clone();
         let value = command.args[1].clone();
 
-        // Check if the command includes the "PX" argument
-        if let Some(px_index) = command
-            .args
-            .iter()
-            .position(|arg| arg.to_lowercase() == "px")
-        {
+        handler.database.set(key, value);
+        handler
+            .write_response(RedisValue::simple_string("OK".to_string()))
+            .await?;
+        Ok(())
+    }
+
+    async fn execute_with_expiry(handler: &mut ResponseHandler, command: &RedisCommandInfo) -> Result<()> {
+        let key = command.args[0].clone();
+        let value = command.args[1].clone();
+
+        if let Some(px_index) = command.args.iter().position(|arg| arg.to_lowercase() == "px") {
             if px_index + 1 < command.args.len() {
                 if let Ok(expiry_ms) = command.args[px_index + 1].parse::<u128>() {
                     let current_time_ms = current_time_ms();
@@ -32,13 +47,12 @@ impl SetCommand {
                     return Ok(());
                 }
             }
-            return Err(anyhow::anyhow!("Invalid expiry time"));
         }
 
-        handler.database.set(key, value);
-        handler
-            .write_response(RedisValue::simple_string("OK".to_string()))
-            .await?;
-        Ok(())
+        Err(anyhow::anyhow!("Invalid expiry time"))
     }
+}
+
+fn command_contains_px_argument(command: &RedisCommandInfo) -> bool {
+    command.args.iter().any(|arg| arg.to_lowercase() == "px")
 }
