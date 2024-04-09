@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 use redis_starter_rust::{
-    replication::{handshake::perform_replica_handshake, ReplicaInfo, StreamType},
+    replication::{handshake::perform_hashshake, ReplicaInfo, StreamType},
     stream::RespHandler,
     utils::random_sha1_hex,
 };
@@ -26,9 +26,9 @@ async fn main() -> Result<()> {
     let role = match &args.replica {
         None => StreamType::Master,
         Some(args) => {
-            perform_replica_handshake(args)
+            perform_hashshake(args)
                 .await
-                .context("Failed to perform replica handshake")?;
+                .context("Failed to perform replica handshake")?; // Do we need to return master_stream here??? And use them in handle_replica?
             StreamType::Slave
         }
     };

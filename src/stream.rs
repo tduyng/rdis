@@ -53,6 +53,9 @@ impl RespHandler {
             let response = match value {
                 Some(v) => {
                     let command = parse_command(v)?;
+                    if is_write_command(&command) {
+                        handler.propagate_command(&command).await?;
+                    }
                     RedisCommand::execute(&mut handler, &command).await
                 }
                 None => break,
@@ -67,6 +70,7 @@ impl RespHandler {
     }
 
     pub async fn handle_replication(stream: TcpStream, replica_info: ReplicaInfo) -> Result<()> {
+        println!("Accepted new replica connection");
         let mut handler = RespHandler::new(stream, replica_info).await;
 
         loop {
@@ -75,17 +79,6 @@ impl RespHandler {
             match value {
                 Some(v) => {
                     let command = parse_command(v)?;
-                    println!(
-                        "Debug: (handle_replication) before is_write_command, command_name: {}",
-                        command.name
-                    );
-                    println!(
-                        "Debug: (handle_replication) value is_write_command: {}",
-                        is_write_command(&command)
-                    );
-                    if is_write_command(&command) {
-                        handler.propagate_command(&command).await?;
-                    }
                     RedisCommand::execute(&mut handler, &command).await?;
                 }
                 None => break,
@@ -99,7 +92,6 @@ impl RespHandler {
         let resp_array = encode_array_command(command);
         let resp_value = RespValue::Array(resp_array);
         let resp_str = resp_value.encode();
-        println!("Debug: (propagate_command) resp_str {}", resp_str);
         self.stream.write_all(resp_str.as_bytes()).await?;
         Ok(())
     }

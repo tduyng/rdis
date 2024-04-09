@@ -5,7 +5,7 @@ use tokio::{
     net::TcpStream,
 };
 
-pub async fn perform_replica_handshake(args: &[String]) -> Result<()> {
+pub async fn perform_hashshake(args: &[String]) -> Result<()> {
     let master_host = &args[0];
     let master_port: u16 = args[1].parse()?;
     let address = format!("{}:{}", master_host, master_port);
