@@ -12,7 +12,7 @@ struct Args {
     #[arg(short, long, default_value = "6379")]
     port: u16,
     #[arg(short,long = "replicaof", value_names = &["MASTER_HOST", "MASTER_PORT"], num_args = 2)]
-    replicaof: Option<Vec<String>>,
+    replica: Option<Vec<String>>,
 }
 
 #[tokio::main]
@@ -21,7 +21,7 @@ async fn main() -> Result<()> {
     let listener = TcpListener::bind(format!("127.0.0.1:{}", args.port)).await?;
     println!("Server listening on 127.0.0.1:{}", args.port);
 
-    let role = match &args.replicaof {
+    let role = match &args.replica {
         None => StreamType::Master,
         Some(args) => {
             perform_replica_handshake(args).await?;
