@@ -43,13 +43,6 @@ async fn main() -> Result<()> {
             .accept()
             .await
             .context("Failed to accept incoming connection")?;
-        match replica_info.role {
-            StreamType::Master => {
-                tokio::spawn(RespHandler::handle_stream(stream, replica_info.clone()));
-            }
-            StreamType::Slave => {
-                tokio::spawn(RespHandler::handle_replication(stream, replica_info.clone()));
-            }
-        }
+        tokio::spawn(RespHandler::handle_stream(stream, replica_info.clone()));
     }
 }
