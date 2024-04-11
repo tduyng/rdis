@@ -25,20 +25,22 @@ pub struct StreamInfo {
 }
 
 pub struct RespHandler {
-    pub buffer: BytesMut,
     pub stream_info: StreamInfo,
 }
 
 impl RespHandler {
     pub async fn new(stream_info: StreamInfo) -> Self {
-        RespHandler {
-            buffer: BytesMut::with_capacity(512),
-            stream_info,
-        }
+        RespHandler { stream_info }
     }
 
-    pub async fn parse_command(&mut self) -> Result<RedisCommandInfo> {
-        let (value, _) = RespValue::decode(self.buffer.split())?;
+    pub async fn parse_command(&mut self, stream: &mut TcpStream) -> Result<RedisCommandInfo> {
+        let mut buffer = BytesMut::with_capacity(512);
+        let bytes_to_read = stream.read_buf(&mut buffer).await?;
+        if bytes_to_read == 0 {
+            return Err(anyhow!("No bytes to read!"));
+        }
+
+        let (value, _) = RespValue::decode(buffer)?;
         match value {
             RespValue::Array(a) => {
                 if let Some(name) = a.first().and_then(|v| unpack_bulk_str(v.clone())) {
@@ -61,12 +63,7 @@ impl RespHandler {
         let mut handler = RespHandler::new(stream_info).await;
 
         loop {
-            let buffer_read = stream.read_buf(&mut handler.buffer).await?;
-            if buffer_read == 0 {
-                return Ok(());
-            }
-
-            let mut cmd_info = handler.parse_command().await?;
+            let mut cmd_info = handler.parse_command(&mut stream).await?;
 
             match cmd_info.name.to_lowercase().as_str() {
                 "psync" => {
@@ -104,11 +101,7 @@ impl RespHandler {
     ) -> Result<()> {
         let mut handler = RespHandler::new(stream_info).await;
         loop {
-            let buffer_read = master_stream.read_buf(&mut handler.buffer).await?;
-            if buffer_read == 0 {
-                return Ok(());
-            }
-            let cmd_info = handler.parse_command().await?;
+            let cmd_info = handler.parse_command(&mut master_stream).await?;
             println!("Debug(replica): cmd_info {:?}", cmd_info);
             if let "set" = cmd_info.name.to_lowercase().as_str() {
                 SetCommand::execute(&cmd_info, store).await?;
