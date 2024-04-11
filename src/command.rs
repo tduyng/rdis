@@ -13,6 +13,7 @@ mod ping;
 mod replconf;
 mod set;
 
+#[derive(Debug, Clone)]
 pub struct RedisCommandInfo {
     pub name: String,
     pub args: Vec<String>,
@@ -53,11 +54,18 @@ impl RedisCommandInfo {
         array_values
     }
 
-    pub async fn propagate(&mut self, store: &RwLock<RedisStore>) -> Result<()> {
+    pub async fn propagate(
+        &mut self,
+        handler: &mut RespHandler,
+        store: &RwLock<RedisStore>,
+    ) -> Result<()> {
         let encoded_command = RespValue::Array(self.encode()).encode();
-        let mut store = store.write().await;
-        for stream in store.repl_streams.iter_mut() {
+        let mut store_guard = store.write().await;
+        let cmd_info = self.clone();
+        for stream in store_guard.repl_streams.iter_mut() {
             stream.write_all(encoded_command.as_bytes()).await?;
+            let response = RedisCommand::execute(handler, &cmd_info, store).await?;
+            stream.write_all(response.as_bytes()).await?
         }
         Ok(())
     }

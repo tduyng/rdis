@@ -79,7 +79,7 @@ impl RespHandler {
             }
 
             if is_write_command(&cmd_info) {
-                cmd_info.propagate(store).await?;
+                cmd_info.propagate(&mut handler, store).await?;
             }
         }
     }
