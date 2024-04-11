@@ -3,7 +3,7 @@ use crate::{
     protocol::{parser::RespValue, rdb::Rdb},
     store::RedisStore,
 };
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use bytes::BytesMut;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -80,28 +80,61 @@ impl RespHandler {
                     .encode();
                     stream.write_all(full_resync.as_bytes()).await?;
 
-                    if handler.is_master {
-                        let empty_rdb = Rdb::get_empty();
-                        stream.write_all(&empty_rdb).await?;
+                    let empty_rdb = Rdb::get_empty();
+                    stream.write_all(&empty_rdb).await?;
 
-                        let mut store = store.write().await;
-                        store.add_repl_streams(stream);
-                    }
+                    let mut store = store.write().await;
+                    store.add_repl_streams(stream);
 
                     return Ok(());
                 }
                 _ => {
                     let response = RedisCommand::execute(&mut handler, &cmd_info, store).await?;
+                    stream.write_all(response.as_bytes()).await?;
 
-                    // Do not send any response back to the master
-                    if handler.is_master || !cmd_info.is_write() {
-                        stream.write_all(response.as_bytes()).await?;
+                    println!("Debug(master): is_write command: {}", cmd_info.is_write());
+                    if cmd_info.is_write() {
+                        cmd_info.propagate(store).await?;
                     }
                 }
             }
+        }
+    }
 
-            if handler.is_master && cmd_info.is_write() {
-                cmd_info.propagate(store).await?;
+    pub async fn handle_replica_stream(
+        mut stream: TcpStream,
+        store: &RwLock<RedisStore>,
+        stream_info: StreamInfo,
+    ) -> Result<()> {
+        let mut handler = RespHandler::new(stream_info).await;
+
+        loop {
+            let buffer_read = stream.read_buf(&mut handler.buffer).await.context("Replica: read buffer")?;
+            if buffer_read == 0 {
+                return Ok(());
+            }
+
+            let cmd_info = handler.parse_command().await.context("Replica: parse command")?;
+
+            match cmd_info.name.to_lowercase().as_str() {
+                "psync" => {
+                    let full_resync = RespValue::SimpleString(format!(
+                        "FULLRESYNC {} 0",
+                        handler.stream_info.master_id
+                    ))
+                    .encode();
+                    stream.write_all(full_resync.as_bytes()).await?;
+
+                    return Ok(());
+                }
+                _ => {
+                    let response = RedisCommand::execute(&mut handler, &cmd_info, store).await?;
+                    println!("Debug(replica): is_write command: {}", cmd_info.is_write());
+                    println!("Debug(replica): command: {:?}", cmd_info);
+                    if !cmd_info.is_write() {
+                        stream.write_all(response.as_bytes()).await?;
+                    }
+                }
             }
         }
     }

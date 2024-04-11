@@ -50,7 +50,13 @@ async fn main() -> Result<()> {
         let store_clone = Arc::clone(&store);
         let stream_info = stream_info.clone();
         tokio::spawn(async move {
-            if let Err(e) = RespHandler::handle_stream(stream, &store_clone, stream_info).await {
+            let result = match stream_info.role {
+                StreamType::Master => {
+                    RespHandler::handle_stream(stream, &store_clone, stream_info).await
+                }
+                _ => RespHandler::handle_replica_stream(stream, &store_clone, stream_info).await,
+            };
+            if let Err(e) = result {
                 eprintln!("Error handling stream: {:?}", e);
             }
         });

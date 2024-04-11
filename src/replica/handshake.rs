@@ -41,5 +41,7 @@ pub async fn perform_hashshake(args: &[String]) -> Result<()> {
     let psync_command = RespValue::encode_array_str(vec!["PSYNC", "?", "-1"]);
     stream.write_all(psync_command.as_bytes()).await?;
 
+    println!("Debug(master): handshake ok");
+
     Ok(())
 }
