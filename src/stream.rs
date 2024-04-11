@@ -78,8 +78,8 @@ impl RespHandler {
                 }
             }
 
-            if is_write_command(&cmd_info) {
-                cmd_info.propagate(&mut handler, store).await?;
+            if cmd_info.is_write() {
+                cmd_info.propagate(store).await?;
             }
         }
     }
@@ -89,42 +89,5 @@ fn unpack_bulk_str(value: RespValue) -> Option<String> {
     match value {
         RespValue::BulkString(s) => Some(s),
         _ => None,
-    }
-}
-
-fn is_write_command(command: &RedisCommandInfo) -> bool {
-    let write_commands = ["set", "del"];
-    write_commands.contains(&command.name.to_lowercase().as_str())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_is_write_command_write() {
-        let command = RedisCommandInfo {
-            name: String::from("SET"),
-            args: vec![],
-        };
-        assert_eq!(is_write_command(&command), true);
-    }
-
-    #[test]
-    fn test_is_write_command_not_write() {
-        let command = RedisCommandInfo {
-            name: String::from("GET"),
-            args: vec![],
-        };
-        assert_eq!(is_write_command(&command), false);
-    }
-
-    #[test]
-    fn test_is_write_command_case_insensitive() {
-        let command = RedisCommandInfo {
-            name: String::from("DeL"),
-            args: vec![],
-        };
-        assert_eq!(is_write_command(&command), true);
     }
 }
