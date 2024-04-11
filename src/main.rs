@@ -27,10 +27,15 @@ async fn main() -> Result<()> {
 
     let role = match &args.replica {
         None => StreamType::Master,
-        Some(args) => {
-            perform_hashshake(args)
-                .await
-                .context("Failed to perform replica handshake")?;
+        Some(replica_args) => {
+            let replica_args_clone = replica_args.clone();
+            let result = tokio::spawn(async move {
+                perform_hashshake(&replica_args_clone).await
+            }).await?;
+            if let Err(e) = result {
+                eprintln!("Error performing replica handshake: {:?}", e);
+                return Err(e);
+            }
             StreamType::Slave
         }
     };
