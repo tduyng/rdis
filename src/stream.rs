@@ -37,8 +37,8 @@ impl RespHandler {
         let mut buffer = BytesMut::with_capacity(512);
         let bytes_to_read = stream.read_buf(&mut buffer).await?;
         if bytes_to_read == 0 {
-            return Err(anyhow!("No bytes to read!"));
-        }
+            return Err(anyhow!("Empty buffer"));
+        };
 
         let (value, _) = RespValue::decode(buffer)?;
         match value {
@@ -94,19 +94,28 @@ impl RespHandler {
         }
     }
 
-    pub async fn handle_replica_stream(
+    pub async fn handle_master_stream(
         mut master_stream: TcpStream,
         store: &RwLock<RedisStore>,
         stream_info: StreamInfo,
     ) -> Result<()> {
+        println!(
+            "Debug(master): start to handle master stream {:?}",
+            stream_info
+        );
         let mut handler = RespHandler::new(stream_info).await;
-        loop {
-            let cmd_info = handler.parse_command(&mut master_stream).await?;
-            println!("Debug(replica): cmd_info {:?}", cmd_info);
-            if let "set" = cmd_info.name.to_lowercase().as_str() {
+        while let Ok(cmd_info) = handler.parse_command(&mut master_stream).await {
+            if cmd_info.name.to_lowercase().as_str() == "set" {
                 SetCommand::execute(&cmd_info, store).await?;
             }
         }
+        Ok(())
+    }
+
+    pub async fn wait_until_response(stream: &mut TcpStream) -> Result<()> {
+        let mut buffer = BytesMut::with_capacity(512);
+        let _ = stream.read_buf(&mut buffer).await?;
+        Ok(())
     }
 }
 

@@ -43,10 +43,21 @@ async fn main() -> Result<()> {
 
             let store_clone = Arc::clone(&store);
             tokio::spawn(async move {
-                if let Err(e) =
-                    perform_handshake(master_stream, &store_clone, replica_stream_info).await
-                {
-                    eprintln!("Error handling replica stream: {:?}", e);
+                match perform_handshake(master_stream).await {
+                    Ok(master_stream) => {
+                        if let Err(err) = RespHandler::handle_master_stream(
+                            master_stream,
+                            &store_clone,
+                            replica_stream_info.clone(),
+                        )
+                        .await
+                        {
+                            eprintln!("Error in handle_master_stream: {:?}", err);
+                        }
+                    }
+                    Err(err) => {
+                        eprintln!("Error in perform_handshake: {:?}", err);
+                    }
                 }
             });
 
@@ -71,7 +82,7 @@ async fn main() -> Result<()> {
         let stream_info = stream_info.clone();
         tokio::spawn(async move {
             if let Err(e) = RespHandler::handle_stream(stream, &store_clone, stream_info).await {
-                eprintln!("Error handling principal stream: {:?}", e);
+                eprintln!("Error handling main stream: {:?}", e);
             }
         });
     }

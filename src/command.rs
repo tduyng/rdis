@@ -59,6 +59,7 @@ impl RedisCommandInfo {
         let mut store_guard = store.write().await;
         for stream in store_guard.repl_streams.iter_mut() {
             stream.write_all(encoded_command.as_bytes()).await?;
+            SetCommand::execute(self, store).await?;
         }
         Ok(())
     }
