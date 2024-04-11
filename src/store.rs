@@ -1,14 +1,15 @@
+use tokio::net::TcpStream;
+
 use crate::utils::current_time_ms;
 use std::{
     collections::HashMap,
-    net::TcpStream,
     sync::{Arc, Mutex},
 };
 
 #[derive(Debug)]
 pub struct RedisStore {
-    data: Arc<Mutex<HashMap<String, (String, u128)>>>,
-    repl_streams: Vec<TcpStream>,
+    pub data: Arc<Mutex<HashMap<String, (String, u128)>>>,
+    pub repl_streams: Vec<TcpStream>,
 }
 
 impl Default for RedisStore {

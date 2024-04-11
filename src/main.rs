@@ -2,10 +2,12 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use redis_starter_rust::{
     replica::{handshake::perform_hashshake, ReplInfo, StreamType},
+    store::RedisStore,
     stream::RespHandler,
     utils::random_sha1_hex,
 };
-use tokio::net::TcpListener;
+use std::sync::Arc;
+use tokio::{net::TcpListener, sync::RwLock};
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -37,12 +39,18 @@ async fn main() -> Result<()> {
         master_id: random_sha1_hex(),
         master_offset: 0,
     };
+    let store = Arc::new(RwLock::new(RedisStore::new()));
 
     loop {
         let (stream, _) = listener
             .accept()
             .await
             .context("Failed to accept incoming connection")?;
-        tokio::spawn(RespHandler::handle_stream(stream, repl_info.clone()));
+        println!("Accepted new connection");
+        let store_clone = Arc::clone(&store);
+        let repl_info = repl_info.clone();
+        tokio::spawn(async move {
+            RespHandler::handle_stream(stream, &store_clone, repl_info).await;
+        });
     }
 }

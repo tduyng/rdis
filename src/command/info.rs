@@ -1,11 +1,12 @@
 use crate::{protocol::parser::RespValue, replica::StreamType, stream::RespHandler};
 use anyhow::Result;
+use tokio::{io::AsyncWriteExt, net::TcpStream};
 
 #[derive(Debug, Clone)]
 pub struct InfoCommand;
 
 impl InfoCommand {
-    pub async fn execute(handler: &mut RespHandler) -> Result<()> {
+    pub async fn execute(mut stream: TcpStream, handler: &RespHandler) -> Result<()> {
         let mut response = String::new();
 
         match &handler.repl_info.role {
@@ -19,8 +20,8 @@ impl InfoCommand {
             }
         }
 
-        handler
-            .write_response(RespValue::BulkString(response).encode())
+        stream
+            .write_all(RespValue::BulkString(response).encode().as_bytes())
             .await?;
         Ok(())
     }

@@ -1,22 +1,27 @@
 use super::RedisCommandInfo;
-use crate::stream::RespHandler;
+use crate::store::RedisStore;
 use anyhow::Result;
+use tokio::{io::AsyncWriteExt, net::TcpStream, sync::RwLock};
 
 #[derive(Debug, Clone)]
 pub struct GetCommand;
 
 impl GetCommand {
-    pub async fn execute(handler: &mut RespHandler, command: &RedisCommandInfo) -> Result<()> {
-        if command.args.len() != 1 {
+    pub async fn execute(
+        mut stream: TcpStream,
+        cmd_info: &RedisCommandInfo,
+        store: &RwLock<RedisStore>,
+    ) -> Result<()> {
+        if cmd_info.args.len() != 1 {
             return Err(anyhow::anyhow!("GET command requires exactly one argument"));
         }
-        let key = &command.args[0];
-
-        if let Some(value) = handler.database.get(key) {
+        let key = &cmd_info.args[0];
+        let store = store.write().await;
+        if let Some(value) = store.get(key) {
             let response = format!("${}\r\n{}\r\n", value.len(), value);
-            handler.write_response(response).await?;
+            stream.write_all(response.as_bytes()).await?;
         } else {
-            handler.write_response("$-1\r\n".to_string()).await?;
+            stream.write_all("$-1\r\n".to_string().as_bytes()).await?;
         }
         Ok(())
     }
