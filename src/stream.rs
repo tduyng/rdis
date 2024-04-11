@@ -1,8 +1,8 @@
 use crate::{
     command::{RedisCommand, RedisCommandInfo},
-    store::Database,
     protocol::parser::RespValue,
-    replication::ReplicaInfo,
+    replica::ReplInfo,
+    store::RedisStore,
 };
 use anyhow::{anyhow, Result};
 use bytes::BytesMut;
@@ -14,18 +14,18 @@ use tokio::{
 pub struct RespHandler {
     pub stream: TcpStream,
     pub buffer: BytesMut,
-    pub database: Database,
-    pub replica_info: ReplicaInfo,
+    pub database: RedisStore,
+    pub repl_info: ReplInfo,
 }
 
 impl RespHandler {
-    pub async fn new(stream: TcpStream, replica_info: ReplicaInfo) -> Self {
-        let database = Database::instance().await;
+    pub async fn new(stream: TcpStream, repl_info: ReplInfo) -> Self {
+        let database = RedisStore::new();
         RespHandler {
             stream,
             buffer: BytesMut::with_capacity(512),
             database,
-            replica_info,
+            repl_info,
         }
     }
 
@@ -43,9 +43,9 @@ impl RespHandler {
         Ok(())
     }
 
-    pub async fn handle_stream(stream: TcpStream, replica_info: ReplicaInfo) -> Result<()> {
+    pub async fn handle_stream(stream: TcpStream, repl_info: ReplInfo) -> Result<()> {
         println!("Accepted new connection");
-        let mut handler = RespHandler::new(stream, replica_info).await;
+        let mut handler = RespHandler::new(stream, repl_info).await;
 
         loop {
             let value = handler.read_value().await?;

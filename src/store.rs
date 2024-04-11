@@ -1,52 +1,49 @@
 use crate::utils::current_time_ms;
-use lazy_static::lazy_static;
-use std::collections::HashMap;
-use tokio::sync::Mutex;
+use std::{
+    collections::HashMap,
+    net::TcpStream,
+    sync::{Arc, Mutex},
+};
 
-#[derive(Debug, Clone)]
-pub struct Database {
-    data: HashMap<String, (String, u128)>,
+#[derive(Debug)]
+pub struct RedisStore {
+    data: Arc<Mutex<HashMap<String, (String, u128)>>>,
+    repl_streams: Vec<TcpStream>,
 }
 
-lazy_static! {
-    pub static ref DATABASE: Mutex<Option<Database>> = Mutex::new(Some(Database::new()));
-}
-
-impl Default for Database {
+impl Default for RedisStore {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Database {
-    fn new() -> Self {
+impl RedisStore {
+    pub fn new() -> Self {
         Self {
-            data: HashMap::new(),
-        }
-    }
-
-    pub async fn instance() -> Database {
-        if let Some(instance) = DATABASE.lock().await.clone() {
-            instance
-        } else {
-            let new_instance = Database::new();
-            *DATABASE.lock().await = Some(new_instance.clone());
-            new_instance
+            data: Arc::new(Mutex::new(HashMap::new())),
+            repl_streams: Vec::new(),
         }
     }
 
     pub fn set(&mut self, key: String, value: String) {
-        self.data.insert(key, (value, 0));
+        self.data.lock().unwrap().insert(key, (value, 0));
     }
 
     pub fn set_with_expiry(&mut self, key: String, value: String, expiry_ms: u128) {
-        self.data.insert(key, (value, expiry_ms));
+        self.data.lock().unwrap().insert(key, (value, expiry_ms));
     }
 
-    pub fn get(&self, key: &str) -> Option<&String> {
-        match self.data.get(key) {
-            Some((value, expiry)) if *expiry == 0 || *expiry > current_time_ms() => Some(value),
-            _ => None,
+    pub fn get(&self, key: &str) -> Option<String> {
+        let store = self.data.lock().unwrap();
+        let (value, expiry) = store.get(key).unwrap();
+        let value = value.clone();
+        if *expiry == 0 || *expiry > current_time_ms() {
+            return Some(value);
         }
+        None
+    }
+
+    pub fn add_repl_streams(&mut self, stream: TcpStream) {
+        self.repl_streams.push(stream)
     }
 }

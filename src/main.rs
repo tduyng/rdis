@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 use redis_starter_rust::{
-    replication::{handshake::perform_hashshake, ReplicaInfo, StreamType},
+    replica::{handshake::perform_hashshake, ReplInfo, StreamType},
     stream::RespHandler,
     utils::random_sha1_hex,
 };
@@ -28,14 +28,14 @@ async fn main() -> Result<()> {
         Some(args) => {
             perform_hashshake(args)
                 .await
-                .context("Failed to perform replica handshake")?; // Do we need to return master_stream here??? And use them in handle_replica?
+                .context("Failed to perform replica handshake")?;
             StreamType::Slave
         }
     };
-    let replica_info = ReplicaInfo {
+    let repl_info = ReplInfo {
         role,
-        repl_id: random_sha1_hex(),
-        repl_offset: 0,
+        master_id: random_sha1_hex(),
+        master_offset: 0,
     };
 
     loop {
@@ -43,6 +43,6 @@ async fn main() -> Result<()> {
             .accept()
             .await
             .context("Failed to accept incoming connection")?;
-        tokio::spawn(RespHandler::handle_stream(stream, replica_info.clone()));
+        tokio::spawn(RespHandler::handle_stream(stream, repl_info.clone()));
     }
 }

@@ -11,7 +11,7 @@ pub struct PsyncCommand;
 impl PsyncCommand {
     pub async fn execute(handler: &mut RespHandler) -> Result<()> {
         let full_resync =
-            RespValue::SimpleString(format!("FULLRESYNC {} 0", handler.replica_info.repl_id))
+            RespValue::SimpleString(format!("FULLRESYNC {} 0", handler.repl_info.master_id))
                 .encode();
         handler.write_response(full_resync).await?;
 

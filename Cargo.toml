@@ -23,7 +23,6 @@ anyhow = "1.0"                                   # error handling
 bytes = "1.6"                                     # helps manage buffers
 clap = { version = "4.5", features = ["derive"] }
 hex = "0.4.3"
-lazy_static = "1.4"
 rand = "0.8"
 sha1 = "0.10"
 thiserror = "1.0"                                # error handling
