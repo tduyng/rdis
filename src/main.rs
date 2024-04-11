@@ -1,13 +1,16 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 use redis_starter_rust::{
-    replica::handshake::perform_hashshake,
+    replica::handshake::perform_handshake,
     store::RedisStore,
     stream::{RespHandler, StreamInfo, StreamType},
     utils::random_sha1_hex,
 };
 use std::sync::Arc;
-use tokio::{net::TcpListener, sync::RwLock};
+use tokio::{
+    net::{TcpListener, TcpStream},
+    sync::RwLock,
+};
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -25,25 +28,38 @@ async fn main() -> Result<()> {
         .context("Failed to bind to address")?;
     println!("Server listening on 127.0.0.1:{}", args.port);
 
+    let store = Arc::new(RwLock::new(RedisStore::new()));
+    let master_id = random_sha1_hex();
+
     let role = match &args.replica {
-        None => StreamType::Master,
         Some(replica_args) => {
-            let replica_args_clone = replica_args.clone();
-            let result =
-                tokio::spawn(async move { perform_hashshake(&replica_args_clone).await }).await?;
-            if let Err(e) = result {
-                eprintln!("Error performing replica handshake: {:?}", e);
-                return Err(e);
-            }
+            let address = format!("{}:{}", &replica_args[0], &replica_args[1]);
+            let master_stream = TcpStream::connect(address).await?;
+            let replica_stream_info = StreamInfo {
+                role: StreamType::Slave,
+                master_id: master_id.clone(),
+                master_offset: 0,
+            };
+
+            let store_clone = Arc::clone(&store);
+            tokio::spawn(async move {
+                if let Err(e) =
+                    perform_handshake(master_stream, &store_clone, replica_stream_info).await
+                {
+                    eprintln!("Error handling replica stream: {:?}", e);
+                }
+            });
+
             StreamType::Slave
         }
+        None => StreamType::Master,
     };
+
     let stream_info = StreamInfo {
         role,
-        master_id: random_sha1_hex(),
+        master_id: master_id.clone(),
         master_offset: 0,
     };
-    let store = Arc::new(RwLock::new(RedisStore::new()));
 
     loop {
         let (stream, _) = listener
@@ -55,7 +71,7 @@ async fn main() -> Result<()> {
         let stream_info = stream_info.clone();
         tokio::spawn(async move {
             if let Err(e) = RespHandler::handle_stream(stream, &store_clone, stream_info).await {
-                eprintln!("Error handling stream: {:?}", e);
+                eprintln!("Error handling principal stream: {:?}", e);
             }
         });
     }

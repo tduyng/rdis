@@ -6,12 +6,12 @@ use crate::{protocol::parser::RespValue, store::RedisStore, stream::RespHandler}
 use anyhow::{anyhow, Result};
 use tokio::{io::AsyncWriteExt, sync::RwLock};
 
-mod echo;
-mod get;
-mod info;
-mod ping;
-mod replconf;
-mod set;
+pub mod echo;
+pub mod get;
+pub mod info;
+pub mod ping;
+pub mod replconf;
+pub mod set;
 
 #[derive(Debug, Clone)]
 pub struct RedisCommandInfo {

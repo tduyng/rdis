@@ -36,12 +36,14 @@ impl RedisStore {
 
     pub fn get(&self, key: &str) -> Option<String> {
         let store = self.data.lock().unwrap();
-        let (value, expiry) = store.get(key).unwrap();
-        let value = value.clone();
-        if *expiry == 0 || *expiry > current_time_ms() {
-            return Some(value);
-        }
-        None
+        store.get(key).and_then(|(value, expiry)| {
+            let value = value.clone();
+            if *expiry == 0 || *expiry > current_time_ms() {
+                Some(value)
+            } else {
+                None
+            }
+        })
     }
 
     pub fn add_repl_streams(&mut self, stream: TcpStream) {

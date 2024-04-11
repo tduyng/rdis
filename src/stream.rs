@@ -1,5 +1,5 @@
 use crate::{
-    command::{RedisCommand, RedisCommandInfo},
+    command::{set::SetCommand, RedisCommand, RedisCommandInfo},
     protocol::{parser::RespValue, rdb::Rdb},
     store::RedisStore,
 };
@@ -27,16 +27,13 @@ pub struct StreamInfo {
 pub struct RespHandler {
     pub buffer: BytesMut,
     pub stream_info: StreamInfo,
-    pub is_master: bool,
 }
 
 impl RespHandler {
     pub async fn new(stream_info: StreamInfo) -> Self {
-        let role = stream_info.role.clone();
         RespHandler {
             buffer: BytesMut::with_capacity(512),
             stream_info,
-            is_master: role == StreamType::Master,
         }
     }
 
@@ -52,7 +49,7 @@ impl RespHandler {
                     Err(anyhow!("Invalid command format"))
                 }
             }
-            _ => Err(anyhow!("Unexpected command format")),
+            _ => Err(anyhow!("Unexpected command format: {:?}", value)),
         }
     }
 
@@ -91,12 +88,30 @@ impl RespHandler {
                 _ => {
                     let response = RedisCommand::execute(&mut handler, &cmd_info, store).await?;
                     stream.write_all(response.as_bytes()).await?;
-
-                    println!("Debug({:?}): is_write command: {} with  command name {}, stream info: {:?}", handler.stream_info.role, cmd_info.is_write(), cmd_info.name, handler.stream_info);
-                    if cmd_info.is_write() {
-                        cmd_info.propagate(store).await?;
-                    }
                 }
+            }
+
+            if cmd_info.is_write() {
+                cmd_info.propagate(store).await?;
+            }
+        }
+    }
+
+    pub async fn handle_replica_stream(
+        mut master_stream: TcpStream,
+        store: &RwLock<RedisStore>,
+        stream_info: StreamInfo,
+    ) -> Result<()> {
+        let mut handler = RespHandler::new(stream_info).await;
+        loop {
+            let buffer_read = master_stream.read_buf(&mut handler.buffer).await?;
+            if buffer_read == 0 {
+                return Ok(());
+            }
+            let cmd_info = handler.parse_command().await?;
+            println!("Debug(replica): cmd_info {:?}", cmd_info);
+            if let "set" = cmd_info.name.to_lowercase().as_str() {
+                SetCommand::execute(&cmd_info, store).await?;
             }
         }
     }
