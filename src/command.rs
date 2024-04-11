@@ -57,11 +57,8 @@ impl RedisCommandInfo {
     pub async fn propagate(&mut self, store: &RwLock<RedisStore>) -> Result<()> {
         let encoded_command = RespValue::Array(self.encode()).encode();
         let mut store_guard = store.write().await;
-        // let cmd_info = self.clone();
         for stream in store_guard.repl_streams.iter_mut() {
             stream.write_all(encoded_command.as_bytes()).await?;
-            // let response = RedisCommand::execute(handler, &cmd_info, store).await?;
-            // stream.write_all(response.as_bytes()).await?
         }
         Ok(())
     }

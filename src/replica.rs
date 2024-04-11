@@ -1,6 +1,6 @@
 pub mod handshake;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum StreamType {
     Master,
     Slave,
