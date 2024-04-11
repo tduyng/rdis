@@ -1,5 +1,5 @@
 use self::{
-    echo::EchoCommand, get::GetCommand, info::InfoCommand, ping::PingCommand,
+    echo::EchoCommand, get::GetCommand, info::InfoCommand, ping::PingCommand, psync::PsyncCommand,
     replconf::ReplConfCommand, set::SetCommand,
 };
 use crate::{protocol::parser::RespValue, store::RedisStore, stream::RespHandler};
@@ -10,6 +10,7 @@ pub mod echo;
 pub mod get;
 pub mod info;
 pub mod ping;
+pub mod psync;
 pub mod replconf;
 pub mod set;
 
@@ -25,7 +26,7 @@ pub struct RedisCommand {}
 impl RedisCommand {
     pub async fn execute(
         handler: &mut RespHandler,
-        cmd_info: &RedisCommandInfo,
+        cmd_info: &mut RedisCommandInfo,
         store: &RwLock<RedisStore>,
     ) -> Result<String> {
         match cmd_info.name.to_lowercase().as_str() {
@@ -35,6 +36,7 @@ impl RedisCommand {
             "set" => SetCommand::execute(cmd_info, store).await,
             "info" => InfoCommand::execute(handler).await,
             "replconf" => ReplConfCommand::execute().await,
+            "psync" => PsyncCommand::execute(handler).await,
             _ => Err(anyhow!("Unknown command: {}", cmd_info.name)),
         }
     }
@@ -45,21 +47,20 @@ impl RedisCommandInfo {
         RedisCommandInfo { name, args }
     }
 
-    pub fn encode(&self) -> Vec<RespValue> {
+    pub fn encode(&self) -> String {
         let mut array_values = Vec::with_capacity(self.args.len() + 1);
         array_values.push(RespValue::BulkString(self.name.clone()));
         for arg in &self.args {
             array_values.push(RespValue::BulkString(arg.clone()));
         }
-        array_values
+        RespValue::Array(array_values).encode()
     }
 
     pub async fn propagate(&mut self, store: &RwLock<RedisStore>) -> Result<()> {
-        let encoded_command = RespValue::Array(self.encode()).encode();
+        let encoded_command = self.encode();
         let mut store_guard = store.write().await;
         for stream in store_guard.repl_streams.iter_mut() {
             stream.write_all(encoded_command.as_bytes()).await?;
-            SetCommand::execute(self, store).await?;
         }
         Ok(())
     }

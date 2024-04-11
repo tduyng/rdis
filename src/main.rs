@@ -45,7 +45,7 @@ async fn main() -> Result<()> {
             tokio::spawn(async move {
                 match perform_handshake(master_stream).await {
                     Ok(master_stream) => {
-                        if let Err(err) = RespHandler::handle_master_stream(
+                        if let Err(err) = RespHandler::handle_stream(
                             master_stream,
                             &store_clone,
                             replica_stream_info.clone(),
@@ -80,10 +80,9 @@ async fn main() -> Result<()> {
         println!("Accepted new connection");
         let store_clone = Arc::clone(&store);
         let stream_info = stream_info.clone();
+
         tokio::spawn(async move {
-            if let Err(e) = RespHandler::handle_stream(stream, &store_clone, stream_info).await {
-                eprintln!("Error handling main stream: {:?}", e);
-            }
+            let _ = RespHandler::handle_stream(stream, &store_clone, stream_info).await;
         });
     }
 }

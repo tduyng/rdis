@@ -8,7 +8,7 @@ pub struct SetCommand;
 
 impl SetCommand {
     pub async fn execute(
-        cmd_info: &RedisCommandInfo,
+        cmd_info: &mut RedisCommandInfo,
         store: &RwLock<RedisStore>,
     ) -> Result<String> {
         if cmd_info.args.len() < 2 {
@@ -17,11 +17,15 @@ impl SetCommand {
             ));
         }
 
-        if contains_px_arg(cmd_info) {
+        let response = if contains_px_arg(cmd_info) {
             Self::execute_with_expiry(cmd_info, store).await
         } else {
             Self::execute_set(cmd_info, store).await
-        }
+        };
+
+        cmd_info.propagate(store).await?;
+
+        response
     }
 
     async fn execute_set(

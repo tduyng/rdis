@@ -1,5 +1,5 @@
 use crate::{
-    command::{set::SetCommand, RedisCommand, RedisCommandInfo},
+    command::{psync::PsyncCommand, RedisCommand, RedisCommandInfo},
     protocol::{parser::RespValue, rdb::Rdb},
     store::RedisStore,
 };
@@ -36,16 +36,21 @@ impl RespHandler {
     pub async fn parse_command(&mut self, stream: &mut TcpStream) -> Result<RedisCommandInfo> {
         let mut buffer = BytesMut::with_capacity(512);
         let bytes_to_read = stream.read_buf(&mut buffer).await?;
+        println!("Debug: parse_command buffer {:?}", buffer);
         if bytes_to_read == 0 {
-            return Err(anyhow!("Empty buffer"));
+            return Err(anyhow!("Empty buffer!"));
         };
-
         let (value, _) = RespValue::decode(buffer)?;
+        println!("Debug: parse_command buffer {:?}", value);
         match value {
             RespValue::Array(a) => {
                 if let Some(name) = a.first().and_then(|v| unpack_bulk_str(v.clone())) {
                     let args: Vec<String> =
                         a.into_iter().skip(1).filter_map(unpack_bulk_str).collect();
+                    println!(
+                        "Debug: parse_command cmd_info name:{}, args: {:?}",
+                        name, args
+                    );
                     Ok(RedisCommandInfo::new(name, args))
                 } else {
                     Err(anyhow!("Invalid command format"))
@@ -67,11 +72,7 @@ impl RespHandler {
 
             match cmd_info.name.to_lowercase().as_str() {
                 "psync" => {
-                    let full_resync = RespValue::SimpleString(format!(
-                        "FULLRESYNC {} 0",
-                        handler.stream_info.master_id
-                    ))
-                    .encode();
+                    let full_resync = PsyncCommand::execute(&mut handler).await?;
                     stream.write_all(full_resync.as_bytes()).await?;
 
                     let empty_rdb = Rdb::get_empty();
@@ -83,39 +84,12 @@ impl RespHandler {
                     return Ok(());
                 }
                 _ => {
-                    let response = RedisCommand::execute(&mut handler, &cmd_info, store).await?;
+                    let response =
+                        RedisCommand::execute(&mut handler, &mut cmd_info, store).await?;
                     stream.write_all(response.as_bytes()).await?;
                 }
             }
-
-            if cmd_info.is_write() {
-                cmd_info.propagate(store).await?;
-            }
         }
-    }
-
-    pub async fn handle_master_stream(
-        mut master_stream: TcpStream,
-        store: &RwLock<RedisStore>,
-        stream_info: StreamInfo,
-    ) -> Result<()> {
-        println!(
-            "Debug(master): start to handle master stream {:?}",
-            stream_info
-        );
-        let mut handler = RespHandler::new(stream_info).await;
-        while let Ok(cmd_info) = handler.parse_command(&mut master_stream).await {
-            if cmd_info.name.to_lowercase().as_str() == "set" {
-                SetCommand::execute(&cmd_info, store).await?;
-            }
-        }
-        Ok(())
-    }
-
-    pub async fn wait_until_response(stream: &mut TcpStream) -> Result<()> {
-        let mut buffer = BytesMut::with_capacity(512);
-        let _ = stream.read_buf(&mut buffer).await?;
-        Ok(())
     }
 }
 
