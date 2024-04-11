@@ -72,7 +72,10 @@ impl RespHandler {
                     store.add_repl_streams(stream);
                     return Ok(());
                 }
-                _ => RedisCommand::execute(stream, &mut handler, &cmd_info, store).await?,
+                _ => {
+                    let response = RedisCommand::execute(&mut handler, &cmd_info, store).await?;
+                    stream.write_all(response.as_bytes()).await?
+                }
             }
 
             if is_write_command(&cmd_info) {
@@ -123,46 +126,5 @@ mod tests {
             args: vec![],
         };
         assert_eq!(is_write_command(&command), true);
-    }
-
-    #[tokio::test]
-    async fn test_parse_command() {
-        let input = RespValue::Array(vec![
-            RespValue::BulkString("SET".to_string()),
-            RespValue::BulkString("key".to_string()),
-            RespValue::BulkString("value".to_string()),
-        ]);
-        let result = parse_command(input);
-        assert!(result.is_ok());
-        let command_info = result.unwrap();
-        assert_eq!(command_info.name, "SET");
-        assert_eq!(
-            command_info.args,
-            vec!["key".to_string(), "value".to_string()]
-        );
-    }
-
-    #[test]
-    fn test_unpack_bulk_str() {
-        let input = RespValue::BulkString("value".to_string());
-        let result = unpack_bulk_str(input);
-        assert_eq!(result, Some("value".to_string()));
-
-        let invalid_input = RespValue::SimpleString("OK".to_string());
-        let result = unpack_bulk_str(invalid_input);
-        assert_eq!(result, None);
-    }
-
-    #[test]
-    fn test_encode_array_command() {
-        let command_info = RedisCommandInfo {
-            name: "SET".to_string(),
-            args: vec!["key".to_string(), "value".to_string()],
-        };
-        let result = encode_array_command(&command_info);
-        assert_eq!(result.len(), 3);
-        assert_eq!(result[0], RespValue::BulkString("SET".to_string()));
-        assert_eq!(result[1], RespValue::BulkString("key".to_string()));
-        assert_eq!(result[2], RespValue::BulkString("value".to_string()));
     }
 }

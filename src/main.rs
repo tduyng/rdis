@@ -50,7 +50,9 @@ async fn main() -> Result<()> {
         let store_clone = Arc::clone(&store);
         let repl_info = repl_info.clone();
         tokio::spawn(async move {
-            RespHandler::handle_stream(stream, &store_clone, repl_info).await;
+            if let Err(e) = RespHandler::handle_stream(stream, &store_clone, repl_info).await {
+                eprintln!("Error handling stream: {:?}", e);
+            }
         });
     }
 }

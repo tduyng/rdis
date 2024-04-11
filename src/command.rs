@@ -4,7 +4,7 @@ use self::{
 };
 use crate::{protocol::parser::RespValue, store::RedisStore, stream::RespHandler};
 use anyhow::{anyhow, Result};
-use tokio::{io::AsyncWriteExt, net::TcpStream, sync::RwLock};
+use tokio::{io::AsyncWriteExt, sync::RwLock};
 
 mod echo;
 mod get;
@@ -23,18 +23,17 @@ pub struct RedisCommand {}
 
 impl RedisCommand {
     pub async fn execute(
-        stream: TcpStream,
         handler: &mut RespHandler,
         cmd_info: &RedisCommandInfo,
         store: &RwLock<RedisStore>,
-    ) -> Result<()> {
+    ) -> Result<String> {
         match cmd_info.name.to_lowercase().as_str() {
-            "ping" => PingCommand::execute(stream).await,
-            "echo" => EchoCommand::execute(stream, cmd_info).await,
-            "get" => GetCommand::execute(stream, cmd_info, store).await,
-            "set" => SetCommand::execute(stream, cmd_info, store).await,
-            "info" => InfoCommand::execute(stream, &handler).await,
-            "replconf" => ReplConfCommand::execute(stream).await,
+            "ping" => PingCommand::execute().await,
+            "echo" => EchoCommand::execute(cmd_info).await,
+            "get" => GetCommand::execute(cmd_info, store).await,
+            "set" => SetCommand::execute(cmd_info, store).await,
+            "info" => InfoCommand::execute(handler).await,
+            "replconf" => ReplConfCommand::execute().await,
             _ => Err(anyhow!("Unknown command: {}", cmd_info.name)),
         }
     }
