@@ -1,7 +1,6 @@
 use crate::{
     command::{RedisCommand, RedisCommandInfo},
     protocol::{parser::RespValue, rdb::Rdb},
-    replica::{ReplInfo, StreamType},
     store::RedisStore,
 };
 use anyhow::{anyhow, Result};
@@ -12,18 +11,31 @@ use tokio::{
     sync::RwLock,
 };
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum StreamType {
+    Master,
+    Slave,
+}
+
+#[derive(Debug, Clone)]
+pub struct StreamInfo {
+    pub role: StreamType,
+    pub master_id: String,
+    pub master_offset: u16,
+}
+
 pub struct RespHandler {
     pub buffer: BytesMut,
-    pub repl_info: ReplInfo,
+    pub stream_info: StreamInfo,
     pub is_master: bool,
 }
 
 impl RespHandler {
-    pub async fn new(repl_info: ReplInfo) -> Self {
-        let role = repl_info.role.clone();
+    pub async fn new(stream_info: StreamInfo) -> Self {
+        let role = stream_info.role.clone();
         RespHandler {
             buffer: BytesMut::with_capacity(512),
-            repl_info,
+            stream_info,
             is_master: role == StreamType::Master,
         }
     }
@@ -47,9 +59,9 @@ impl RespHandler {
     pub async fn handle_stream(
         mut stream: TcpStream,
         store: &RwLock<RedisStore>,
-        repl_info: ReplInfo,
+        stream_info: StreamInfo,
     ) -> Result<()> {
-        let mut handler = RespHandler::new(repl_info).await;
+        let mut handler = RespHandler::new(stream_info).await;
 
         loop {
             let buffer_read = stream.read_buf(&mut handler.buffer).await?;
@@ -63,7 +75,7 @@ impl RespHandler {
                 "psync" => {
                     let full_resync = RespValue::SimpleString(format!(
                         "FULLRESYNC {} 0",
-                        handler.repl_info.master_id
+                        handler.stream_info.master_id
                     ))
                     .encode();
                     stream.write_all(full_resync.as_bytes()).await?;
@@ -80,7 +92,7 @@ impl RespHandler {
                 }
                 _ => {
                     let response = RedisCommand::execute(&mut handler, &cmd_info, store).await?;
-                    
+
                     // Do not send any response back to the master
                     if handler.is_master || !cmd_info.is_write() {
                         stream.write_all(response.as_bytes()).await?;

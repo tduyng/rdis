@@ -1,9 +1,9 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 use redis_starter_rust::{
-    replica::{handshake::perform_hashshake, ReplInfo, StreamType},
+    replica::handshake::perform_hashshake,
     store::RedisStore,
-    stream::RespHandler,
+    stream::{RespHandler, StreamInfo, StreamType},
     utils::random_sha1_hex,
 };
 use std::sync::Arc;
@@ -34,7 +34,7 @@ async fn main() -> Result<()> {
             StreamType::Slave
         }
     };
-    let repl_info = ReplInfo {
+    let stream_info = StreamInfo {
         role,
         master_id: random_sha1_hex(),
         master_offset: 0,
@@ -48,9 +48,9 @@ async fn main() -> Result<()> {
             .context("Failed to accept incoming connection")?;
         println!("Accepted new connection");
         let store_clone = Arc::clone(&store);
-        let repl_info = repl_info.clone();
+        let stream_info = stream_info.clone();
         tokio::spawn(async move {
-            if let Err(e) = RespHandler::handle_stream(stream, &store_clone, repl_info).await {
+            if let Err(e) = RespHandler::handle_stream(stream, &store_clone, stream_info).await {
                 eprintln!("Error handling stream: {:?}", e);
             }
         });
