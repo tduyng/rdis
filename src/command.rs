@@ -2,7 +2,7 @@ use self::{
     echo::EchoCommand, get::GetCommand, info::InfoCommand, ping::PingCommand, psync::PsyncCommand,
     replconf::ReplConfCommand, set::SetCommand,
 };
-use crate::{protocol::parser::RespValue, store::RedisStore, stream::RespHandler};
+use crate::{protocol::parser::RespValue, store::RedisStore, stream::StreamInfo};
 use anyhow::{anyhow, Result};
 use tokio::{io::AsyncWriteExt, sync::RwLock};
 
@@ -25,7 +25,7 @@ pub struct RedisCommand {}
 
 impl RedisCommand {
     pub async fn execute(
-        handler: &mut RespHandler,
+        stream_info: &StreamInfo,
         cmd_info: &mut RedisCommandInfo,
         store: &RwLock<RedisStore>,
     ) -> Result<String> {
@@ -34,9 +34,9 @@ impl RedisCommand {
             "echo" => EchoCommand::execute(cmd_info).await,
             "get" => GetCommand::execute(cmd_info, store).await,
             "set" => SetCommand::execute(cmd_info, store).await,
-            "info" => InfoCommand::execute(handler).await,
+            "info" => InfoCommand::execute(stream_info).await,
             "replconf" => ReplConfCommand::execute().await,
-            "psync" => PsyncCommand::execute(handler).await,
+            "psync" => PsyncCommand::execute(stream_info).await,
             _ => Err(anyhow!("Unknown command: {}", cmd_info.name)),
         }
     }

@@ -1,101 +1,44 @@
-use crate::{
-    command::{psync::PsyncCommand, RedisCommand, RedisCommandInfo},
-    protocol::{parser::RespValue, rdb::Rdb},
-    store::RedisStore,
-};
-use anyhow::{anyhow, Result};
-use bytes::BytesMut;
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::TcpStream,
-    sync::RwLock,
-};
+use crate::utils::random_sha1_hex;
+use core::fmt;
+use std::net::SocketAddr;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum StreamType {
     Master,
-    Slave,
+    Slave(SocketAddr),
+}
+
+impl fmt::Display for StreamType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let str = match self {
+            Self::Master => "master",
+            Self::Slave(_) => "slave",
+        };
+        write!(f, "{}", str)
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct StreamInfo {
     pub role: StreamType,
-    pub master_id: String,
-    pub master_offset: u16,
+    pub connected_clients: usize,
+    pub id: String,
+    pub offset: u16,
 }
 
-pub struct RespHandler {
-    pub stream_info: StreamInfo,
-}
-
-impl RespHandler {
-    pub async fn new(stream_info: StreamInfo) -> Self {
-        RespHandler { stream_info }
-    }
-
-    pub async fn parse_command(&mut self, stream: &mut TcpStream) -> Result<RedisCommandInfo> {
-        let mut buffer = BytesMut::with_capacity(512);
-        let bytes_to_read = stream.read_buf(&mut buffer).await?;
-        println!("Debug: parse_command buffer {:?}", buffer);
-        if bytes_to_read == 0 {
-            return Err(anyhow!("Empty buffer!"));
+impl StreamInfo {
+    pub fn new(socket_addr: Option<SocketAddr>) -> Self {
+        let role = if let Some(addr) = socket_addr {
+            StreamType::Slave(addr)
+        } else {
+            StreamType::Master
         };
-        let (value, _) = RespValue::decode(buffer)?;
-        println!("Debug: parse_command buffer {:?}", value);
-        match value {
-            RespValue::Array(a) => {
-                if let Some(name) = a.first().and_then(|v| unpack_bulk_str(v.clone())) {
-                    let args: Vec<String> =
-                        a.into_iter().skip(1).filter_map(unpack_bulk_str).collect();
-                    println!(
-                        "Debug: parse_command cmd_info name:{}, args: {:?}",
-                        name, args
-                    );
-                    Ok(RedisCommandInfo::new(name, args))
-                } else {
-                    Err(anyhow!("Invalid command format"))
-                }
-            }
-            _ => Err(anyhow!("Unexpected command format: {:?}", value)),
+
+        Self {
+            role,
+            connected_clients: 0,
+            id: random_sha1_hex(),
+            offset: 0,
         }
-    }
-
-    pub async fn handle_stream(
-        mut stream: TcpStream,
-        store: &RwLock<RedisStore>,
-        stream_info: StreamInfo,
-    ) -> Result<()> {
-        let mut handler = RespHandler::new(stream_info).await;
-
-        loop {
-            let mut cmd_info = handler.parse_command(&mut stream).await?;
-
-            match cmd_info.name.to_lowercase().as_str() {
-                "psync" => {
-                    let full_resync = PsyncCommand::execute(&mut handler).await?;
-                    stream.write_all(full_resync.as_bytes()).await?;
-
-                    let empty_rdb = Rdb::get_empty();
-                    stream.write_all(&empty_rdb).await?;
-
-                    let mut store = store.write().await;
-                    store.add_repl_streams(stream);
-
-                    return Ok(());
-                }
-                _ => {
-                    let response =
-                        RedisCommand::execute(&mut handler, &mut cmd_info, store).await?;
-                    stream.write_all(response.as_bytes()).await?;
-                }
-            }
-        }
-    }
-}
-
-fn unpack_bulk_str(value: RespValue) -> Option<String> {
-    match value {
-        RespValue::BulkString(s) => Some(s),
-        _ => None,
     }
 }
