@@ -15,6 +15,7 @@ use tokio::{
 };
 
 pub struct Handler {}
+
 impl Handler {
     pub async fn parse_command(stream: &mut TcpStream) -> Result<RedisCommandInfo> {
         let mut buffer = BytesMut::with_capacity(512);
@@ -42,89 +43,112 @@ impl Handler {
         store: Arc<Mutex<RedisStore>>,
         stream_info: Arc<Mutex<StreamInfo>>,
     ) {
+        let mut full_resync = false;
+
         loop {
-            let cmd_info = Self::parse_command(&mut stream).await.unwrap();
-            let stream_info_guard = stream_info.lock().await;
+            if full_resync {
+                {
+                    let empty_rdb = Rdb::get_empty();
+                    let _ = stream.write_all(&empty_rdb).await;
+                }
+                let (repl_handle, handle) = replicate_channel(stream);
+                {
+                    let stream_info = stream_info.lock().await;
+                    stream_info.repl_handles.lock().await.push(repl_handle);
+                }
+                _ = handle.await;
+                return;
+            }
+            let cmd_info = match Self::parse_command(&mut stream).await {
+                Ok(cmd_info) => cmd_info,
+                Err(_) => {
+                    continue;
+                }
+            };
 
             match cmd_info.to_command() {
-                Some(command) => match command {
-                    RedisCommand::Ping => {
-                        write_response(
-                            &mut stream,
-                            RespValue::SimpleString("PONG".to_string()).encode(),
-                        )
-                        .await
-                    }
-                    RedisCommand::Echo(message) => {
-                        write_response(&mut stream, RespValue::SimpleString(message).encode())
-                            .await;
-                    }
-                    RedisCommand::Get(key) => {
-                        let response = if let Some(entry) = store.lock().await.get(key) {
-                            format!("${}\r\n{}\r\n", entry.value.len(), entry.value)
-                        } else {
-                            "$-1\r\n".to_string()
-                        };
-                        write_response(&mut stream, response).await;
-                    }
-                    RedisCommand::Set(key, entry) => {
-                        store.lock().await.set(key, entry);
-                        write_response(
-                            &mut stream,
-                            RespValue::SimpleString("OK".to_string()).encode(),
-                        )
-                        .await;
-                    }
-                    RedisCommand::Info => {
-                        let response = format!(
-                            "# Replication\n\
-                            role:{}\n\
-                            connected_clients:{}\n\
-                            master_replid:{}\n\
-                            master_repl_offset:{}\n\
-                            ",
-                            stream_info_guard.role,
-                            stream_info_guard.connected_clients,
-                            stream_info_guard.id,
-                            stream_info_guard.offset
-                        );
-                        write_response(&mut stream, RespValue::BulkString(response).encode()).await;
-                    }
-                    RedisCommand::Replconf => {
-                        write_response(
-                            &mut stream,
-                            RespValue::SimpleString("OK".to_string()).encode(),
-                        )
-                        .await;
-                    }
-                    RedisCommand::Psync => {
-                        let response = RespValue::SimpleString(format!(
-                            "FULLRESYNC {} 0",
-                            stream_info_guard.id
-                        ))
-                        .encode();
-                        write_response(&mut stream, response).await;
+                Some(command) => {
+                    let command_clone = command.clone();
+                    match command {
+                        RedisCommand::Ping => {
+                            write_response(
+                                &mut stream,
+                                RespValue::SimpleString("PONG".to_string()).encode(),
+                            )
+                            .await
+                        }
+                        RedisCommand::Echo(message) => {
+                            write_response(&mut stream, RespValue::SimpleString(message).encode())
+                                .await;
+                        }
+                        RedisCommand::Get(key) => {
+                            let response = if let Some(entry) = store.lock().await.get(key) {
+                                format!("${}\r\n{}\r\n", entry.value.len(), entry.value)
+                            } else {
+                                "$-1\r\n".to_string()
+                            };
+                            write_response(&mut stream, response).await;
+                        }
+                        RedisCommand::Set(key, entry) => {
+                            dbg!(
+                                "Set command with key {} entry {:?}",
+                                key.clone(),
+                                entry.clone()
+                            );
+                            store.lock().await.set(key, entry);
+                            for replication in stream_info
+                                .lock()
+                                .await
+                                .repl_handles
+                                .lock()
+                                .await
+                                .iter_mut()
+                            {
+                                if let Some(replica_command) = command_clone.to_replica_command() {
+                                    _ = replication.sender.send(replica_command).await;
+                                }
+                            }
 
-                        {
-                            let empty_rdb = Rdb::get_empty();
-                            let _ = stream.write_all(&empty_rdb).await;
+                            write_response(
+                                &mut stream,
+                                RespValue::SimpleString("OK".to_string()).encode(),
+                            )
+                            .await;
                         }
-                        let (repl_handle, handle) = replicate_channel(stream);
-                        {
-                            let stream_info = stream_info.lock().await;
-                            stream_info.repl_handles.lock().await.push(repl_handle);
+                        RedisCommand::Info => {
+                            let info = stream_info.lock().await;
+                            let response = format!(
+                                "# Replication\n\
+                                role:{}\n\
+                                connected_clients:{}\n\
+                                master_replid:{}\n\
+                                master_repl_offset:{}\n\
+                                ",
+                                info.role, info.connected_clients, info.id, info.offset
+                            );
+                            write_response(&mut stream, RespValue::BulkString(response).encode())
+                                .await;
                         }
-                        _ = handle.await;
-                        return;
+                        RedisCommand::Replconf => {
+                            write_response(
+                                &mut stream,
+                                RespValue::SimpleString("OK".to_string()).encode(),
+                            )
+                            .await;
+                        }
+                        RedisCommand::Psync => {
+                            let response = RespValue::SimpleString(format!(
+                                "FULLRESYNC {} 0",
+                                stream_info.lock().await.id
+                            ))
+                            .encode();
+                            write_response(&mut stream, response).await;
+
+                            full_resync = true;
+                        }
+                        _ => break,
                     }
-                    _ => {
-                        write_response(
-                            &mut stream,
-                            RespValue::SimpleString("Unknown command".to_string()).encode(),
-                        )
-                        .await
-                    }
-                },
+                }
                 None => {
                     write_response(
                         &mut stream,
