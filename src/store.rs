@@ -47,8 +47,8 @@ impl RedisStore {
             data: HashMap::new(),
         }
     }
-    pub fn set(&mut self, key: String, value: Entry) {
-        self.data.insert(key, value);
+    pub fn set(&mut self, key: String, entry: Entry) {
+        self.data.insert(key, entry);
     }
 
     pub fn get(&self, key: String) -> Option<&Entry> {

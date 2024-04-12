@@ -1,5 +1,5 @@
 use crate::{
-    command::{psync::PsyncCommand, RedisCommand, RedisCommandInfo},
+    command::{RedisCommand, RedisCommandInfo},
     protocol::{parser::RespValue, rdb::Rdb},
     store::RedisStore,
     stream::StreamInfo,
@@ -18,22 +18,15 @@ impl Handler {
     pub async fn parse_command(stream: &mut TcpStream) -> Result<RedisCommandInfo> {
         let mut buffer = BytesMut::with_capacity(512);
         let bytes_to_read = stream.read_buf(&mut buffer).await?;
-        dbg!("Debug: parse_command buffer {:?}", buffer.clone());
         if bytes_to_read == 0 {
             return Err(anyhow!("Empty buffer!"));
         };
         let (value, _) = RespValue::decode(buffer)?;
-        dbg!("Debug: parse_command buffer {:?}", value.clone());
         match value {
             RespValue::Array(a) => {
                 if let Some(name) = a.first().and_then(|v| unpack_bulk_str(v.clone())) {
                     let args: Vec<String> =
                         a.into_iter().skip(1).filter_map(unpack_bulk_str).collect();
-                    dbg!(
-                        "Debug: parse_command cmd_info name:{}, args: {:?}",
-                        name.clone(),
-                        args.clone()
-                    );
                     Ok(RedisCommandInfo::new(name, args))
                 } else {
                     Err(anyhow!("Invalid command format"))
@@ -54,7 +47,9 @@ impl Handler {
 
             match cmd_info.name.to_lowercase().as_str() {
                 "psync" => {
-                    let full_resync = PsyncCommand::execute(&stream_info).await?;
+                    let full_resync =
+                        RespValue::SimpleString(format!("FULLRESYNC {} 0", stream_info.id))
+                            .encode();
                     stream.write_all(full_resync.as_bytes()).await?;
 
                     let empty_rdb = Rdb::get_empty();
