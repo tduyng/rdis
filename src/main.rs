@@ -1,6 +1,11 @@
 use anyhow::{Context, Result};
 use clap::Parser;
-use redis_starter_rust::{handler::Handler, store::RedisStore, stream::StreamInfo};
+use redis_starter_rust::{
+    handler::Handler,
+    replica::{handshake::perform_handshake_to_master, should_replicate},
+    store::RedisStore,
+    stream::StreamInfo,
+};
 use std::{
     net::{IpAddr, SocketAddr, ToSocketAddrs},
     sync::Arc,
@@ -41,9 +46,16 @@ async fn main() -> Result<()> {
         }
         None => None,
     };
+    let stream_info = Arc::new(Mutex::new(StreamInfo::new(repl_addr)));
+
+    {
+        let info = stream_info.lock().await;
+        if should_replicate(&info) {
+            perform_handshake_to_master(&info).await?;
+        }
+    }
 
     let store = Arc::new(RwLock::new(RedisStore::new()));
-    let stream_info = Arc::new(Mutex::new(StreamInfo::new(repl_addr)));
     let socket_address = SocketAddr::new(args.address, args.port);
     let listener = TcpListener::bind(socket_address)
         .await

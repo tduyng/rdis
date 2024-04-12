@@ -1,11 +1,20 @@
-use crate::protocol::parser::RespValue;
-use anyhow::Result;
+use crate::{protocol::parser::RespValue, stream::StreamInfo};
+use anyhow::{anyhow, Result};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
 };
 
-pub async fn perform_handshake(mut master_stream: TcpStream) -> Result<TcpStream> {
+use super::get_master_socket_addr;
+
+pub async fn perform_handshake_to_master(stream_info: &StreamInfo) -> Result<TcpStream> {
+    let socket_addr = get_master_socket_addr(stream_info);
+    if socket_addr.is_none() {
+        return Err(anyhow!("invalid socket address"));
+    }
+    let socket_addr = socket_addr.unwrap();
+    let mut master_stream = TcpStream::connect(socket_addr).await?;
+
     // Send PING
     let ping_command = RespValue::encode_array_str(vec!["PING"]);
     master_stream.write_all(ping_command.as_bytes()).await?;
