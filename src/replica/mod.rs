@@ -1,9 +1,27 @@
-use crate::stream::{StreamInfo, StreamType};
-use std::net::SocketAddr;
+use crate::{
+    protocol::parser::RespValue,
+    stream::{StreamInfo, StreamType},
+};
+use std::{net::SocketAddr, sync::Arc};
+use tokio::sync::{
+    mpsc::{Receiver, Sender},
+    Mutex,
+};
 
 pub mod handshake;
 
-pub fn should_replicate(stream_info: &StreamInfo) -> bool {
+#[derive(Debug)]
+pub struct ReplicaCommand {
+    pub message: RespValue,
+}
+#[derive(Debug)]
+pub struct ReplicaHandle {
+    pub sender: Sender<ReplicaCommand>,
+    pub receiver: Receiver<ReplicaCommand>,
+}
+
+pub async fn should_replicate(stream_info: &Arc<Mutex<StreamInfo>>) -> bool {
+    let stream_info = stream_info.lock().await;
     match stream_info.role {
         StreamType::Master => false,
         StreamType::Slave(_) => true,

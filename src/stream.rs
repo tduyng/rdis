@@ -1,6 +1,7 @@
-use crate::{args::CliArgs, utils::random_sha1_hex};
+use crate::{args::CliArgs, replica::ReplicaHandle, utils::random_sha1_hex};
 use core::fmt;
 use std::net::{SocketAddr, ToSocketAddrs};
+use tokio::sync::Mutex;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum StreamType {
@@ -18,13 +19,14 @@ impl fmt::Display for StreamType {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct StreamInfo {
     pub role: StreamType,
     pub connected_clients: usize,
     pub id: String,
     pub offset: u16,
     pub socket_addr: SocketAddr,
+    pub repl_handles: Mutex<Vec<ReplicaHandle>>,
 }
 
 impl StreamInfo {
@@ -44,6 +46,7 @@ impl StreamInfo {
             id: random_sha1_hex(),
             offset: 0,
             socket_addr,
+            repl_handles: Mutex::new(Vec::new()),
         }
     }
 }

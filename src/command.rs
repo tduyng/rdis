@@ -4,7 +4,8 @@ use self::{
 };
 use crate::{protocol::parser::RespValue, store::RedisStore, stream::StreamInfo};
 use anyhow::{anyhow, Result};
-use tokio::{io::AsyncWriteExt, sync::RwLock};
+use std::sync::Arc;
+use tokio::{io::AsyncWriteExt, sync::Mutex};
 
 pub mod echo;
 pub mod get;
@@ -27,7 +28,7 @@ impl RedisCommand {
     pub async fn execute(
         stream_info: &StreamInfo,
         cmd_info: &mut RedisCommandInfo,
-        store: &RwLock<RedisStore>,
+        store: &Arc<Mutex<RedisStore>>,
     ) -> Result<String> {
         match cmd_info.name.to_lowercase().as_str() {
             "ping" => PingCommand::execute().await,
@@ -56,9 +57,9 @@ impl RedisCommandInfo {
         RespValue::Array(array_values).encode()
     }
 
-    pub async fn propagate(&mut self, store: &RwLock<RedisStore>) -> Result<()> {
+    pub async fn propagate(&mut self, store: &Arc<Mutex<RedisStore>>) -> Result<()> {
         let encoded_command = self.encode();
-        let mut store_guard = store.write().await;
+        let mut store_guard = store.lock().await;
         for stream in store_guard.repl_streams.iter_mut() {
             stream.write_all(encoded_command.as_bytes()).await?;
         }

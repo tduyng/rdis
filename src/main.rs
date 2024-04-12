@@ -8,33 +8,29 @@ use redis_starter_rust::{
     stream::StreamInfo,
 };
 use std::sync::Arc;
-use tokio::{
-    net::TcpListener,
-    sync::{Mutex, RwLock},
-};
+use tokio::{net::TcpListener, sync::Mutex};
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = CliArgs::parse();
     let stream_info = Arc::new(Mutex::new(StreamInfo::new(&args)));
+    let store = Arc::new(Mutex::new(RedisStore::new()));
 
-    let socket_addr = {
-        let info = stream_info.lock().await;
-        if should_replicate(&info) {
-            let info = info.clone();
-            tokio::spawn(async move {
-                if let Err(e) = perform_handshake_to_master(&info).await {
-                    eprintln!("error performing handshake to master: {}", e)
-                }
-            });
-        }
-        info.socket_addr
-    };
+    if should_replicate(&stream_info).await {
+        let info = stream_info.clone();
+        let store = store.clone();
+        tokio::spawn(async move {
+            let stream = perform_handshake_to_master(&info)
+                .await
+                .expect("Failed the handshake with the master");
+            let _ = Handler::handle_stream(stream, store, info).await;
+        });
+    }
 
-    let store = Arc::new(RwLock::new(RedisStore::new()));
+    let socket_addr = stream_info.lock().await.socket_addr;
     let listener = TcpListener::bind(socket_addr)
         .await
-        .context("Failed to bind to address")?;
+        .context("failed to bind to address")?;
     println!("Server listening on {}", socket_addr);
 
     loop {
@@ -44,11 +40,11 @@ async fn main() -> Result<()> {
         let (stream, _) = listener
             .accept()
             .await
-            .context("Failed to accept incoming connection")?;
+            .context("failed to accept incoming connection")?;
         println!("Accepted new connection");
 
         tokio::spawn(async move {
-            let _ = Handler::handle_stream(stream, stream_info, store).await;
+            let _ = Handler::handle_stream(stream, store, stream_info).await;
         });
     }
 }

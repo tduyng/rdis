@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use crate::{
     command::{psync::PsyncCommand, RedisCommand, RedisCommandInfo},
     protocol::{parser::RespValue, rdb::Rdb},
@@ -8,10 +6,11 @@ use crate::{
 };
 use anyhow::{anyhow, Result};
 use bytes::BytesMut;
+use std::sync::Arc;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
-    sync::{Mutex, RwLock},
+    sync::Mutex,
 };
 
 pub struct Handler {}
@@ -45,8 +44,8 @@ impl Handler {
 
     pub async fn handle_stream(
         mut stream: TcpStream,
+        store: Arc<Mutex<RedisStore>>,
         stream_info: Arc<Mutex<StreamInfo>>,
-        store: Arc<RwLock<RedisStore>>,
     ) -> Result<()> {
         loop {
             let mut cmd_info = Self::parse_command(&mut stream).await?;
@@ -60,7 +59,7 @@ impl Handler {
                     let empty_rdb = Rdb::get_empty();
                     stream.write_all(&empty_rdb).await?;
 
-                    let mut store = store.write().await;
+                    let mut store = store.lock().await;
                     store.add_repl_streams(stream);
 
                     return Ok(());
