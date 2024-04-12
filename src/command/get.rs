@@ -16,10 +16,9 @@ impl GetCommand {
         if cmd_info.args.len() != 1 {
             return Err(anyhow::anyhow!("GET command requires exactly one argument"));
         }
-        let key = &cmd_info.args[0];
-        let store = store.lock().await;
-        if let Some(value) = store.get(key) {
-            let response = format!("${}\r\n{}\r\n", value.len(), value);
+        let key = cmd_info.args[0].clone();
+        if let Some(entry) = store.lock().await.get(key) {
+            let response = format!("${}\r\n{}\r\n", entry.value.len(), entry.value);
             Ok(response)
         } else {
             Ok("$-1\r\n".to_string())

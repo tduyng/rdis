@@ -3,9 +3,14 @@ use crate::{
     stream::{StreamInfo, StreamType},
 };
 use std::{net::SocketAddr, sync::Arc};
-use tokio::sync::{
-    mpsc::{Receiver, Sender},
-    Mutex,
+use tokio::{
+    io::AsyncWriteExt,
+    net::TcpStream,
+    sync::{
+        mpsc::{self, Receiver, Sender},
+        Mutex,
+    },
+    task::JoinHandle,
 };
 
 pub mod handshake;
@@ -18,6 +23,28 @@ pub struct ReplicaCommand {
 pub struct ReplicaHandle {
     pub sender: Sender<ReplicaCommand>,
     pub receiver: Receiver<ReplicaCommand>,
+}
+
+pub fn replicate_channel(mut stream: TcpStream) -> (ReplicaHandle, JoinHandle<()>) {
+    let (tx_res, mut rx) = mpsc::channel::<ReplicaCommand>(32);
+    let (_tx, rx_res) = mpsc::channel::<ReplicaCommand>(32);
+    let handle = tokio::spawn(async move {
+        loop {
+            dbg!("wait for response");
+            while let Some(replica_command) = rx.recv().await {
+                let _ = stream
+                    .write_all(replica_command.message.encode().as_bytes())
+                    .await;
+            }
+        }
+    });
+    (
+        ReplicaHandle {
+            sender: tx_res,
+            receiver: rx_res,
+        },
+        handle,
+    )
 }
 
 pub async fn should_replicate(stream_info: &Arc<Mutex<StreamInfo>>) -> bool {

@@ -5,7 +5,7 @@ use self::{
 use crate::{protocol::parser::RespValue, store::RedisStore, stream::StreamInfo};
 use anyhow::{anyhow, Result};
 use std::sync::Arc;
-use tokio::{io::AsyncWriteExt, sync::Mutex};
+use tokio::sync::Mutex;
 
 pub mod echo;
 pub mod get;
@@ -55,15 +55,6 @@ impl RedisCommandInfo {
             array_values.push(RespValue::BulkString(arg.clone()));
         }
         RespValue::Array(array_values).encode()
-    }
-
-    pub async fn propagate(&mut self, store: &Arc<Mutex<RedisStore>>) -> Result<()> {
-        let encoded_command = self.encode();
-        let mut store_guard = store.lock().await;
-        for stream in store_guard.repl_streams.iter_mut() {
-            stream.write_all(encoded_command.as_bytes()).await?;
-        }
-        Ok(())
     }
 
     pub fn is_write(&self) -> bool {

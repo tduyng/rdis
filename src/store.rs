@@ -1,15 +1,38 @@
-use tokio::net::TcpStream;
-
-use crate::utils::current_time_ms;
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex},
+    time::{Duration, SystemTime},
 };
+
+#[derive(Debug, Clone)]
+pub struct Entry {
+    pub value: String,
+    pub expiry_time: Option<Duration>,
+    pub expiry_at: Option<SystemTime>,
+}
+
+impl Entry {
+    pub fn new(value: String, expiry: Option<Duration>) -> Self {
+        if expiry.is_some() {
+            let current_time = SystemTime::now();
+            let expiry_time = current_time + expiry.unwrap();
+            Self {
+                value,
+                expiry_time: expiry,
+                expiry_at: Some(expiry_time),
+            }
+        } else {
+            Self {
+                value,
+                expiry_time: None,
+                expiry_at: None,
+            }
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct RedisStore {
-    pub data: Arc<Mutex<HashMap<String, (String, u128)>>>,
-    pub repl_streams: Vec<TcpStream>,
+    pub data: HashMap<String, Entry>,
 }
 
 impl Default for RedisStore {
@@ -21,32 +44,22 @@ impl Default for RedisStore {
 impl RedisStore {
     pub fn new() -> Self {
         Self {
-            data: Arc::new(Mutex::new(HashMap::new())),
-            repl_streams: Vec::new(),
+            data: HashMap::new(),
         }
     }
-
-    pub fn set(&mut self, key: String, value: String) {
-        self.data.lock().unwrap().insert(key, (value, 0));
+    pub fn set(&mut self, key: String, value: Entry) {
+        self.data.insert(key, value);
     }
 
-    pub fn set_with_expiry(&mut self, key: String, value: String, expiry_ms: u128) {
-        self.data.lock().unwrap().insert(key, (value, expiry_ms));
-    }
-
-    pub fn get(&self, key: &str) -> Option<String> {
-        let store = self.data.lock().unwrap();
-        store.get(key).and_then(|(value, expiry)| {
-            let value = value.clone();
-            if *expiry == 0 || *expiry > current_time_ms() {
-                Some(value)
-            } else {
-                None
+    pub fn get(&self, key: String) -> Option<&Entry> {
+        let entry = self.data.get(&key);
+        entry?;
+        let entry = entry.unwrap();
+        if let Some(expiry_date_time) = entry.expiry_at {
+            if SystemTime::now() > expiry_date_time {
+                return None;
             }
-        })
-    }
-
-    pub fn add_repl_streams(&mut self, stream: TcpStream) {
-        self.repl_streams.push(stream)
+        }
+        Some(entry)
     }
 }

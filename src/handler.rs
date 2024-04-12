@@ -18,20 +18,21 @@ impl Handler {
     pub async fn parse_command(stream: &mut TcpStream) -> Result<RedisCommandInfo> {
         let mut buffer = BytesMut::with_capacity(512);
         let bytes_to_read = stream.read_buf(&mut buffer).await?;
-        println!("Debug: parse_command buffer {:?}", buffer);
+        dbg!("Debug: parse_command buffer {:?}", buffer.clone());
         if bytes_to_read == 0 {
             return Err(anyhow!("Empty buffer!"));
         };
         let (value, _) = RespValue::decode(buffer)?;
-        println!("Debug: parse_command buffer {:?}", value);
+        dbg!("Debug: parse_command buffer {:?}", value.clone());
         match value {
             RespValue::Array(a) => {
                 if let Some(name) = a.first().and_then(|v| unpack_bulk_str(v.clone())) {
                     let args: Vec<String> =
                         a.into_iter().skip(1).filter_map(unpack_bulk_str).collect();
-                    println!(
+                    dbg!(
                         "Debug: parse_command cmd_info name:{}, args: {:?}",
-                        name, args
+                        name.clone(),
+                        args.clone()
                     );
                     Ok(RedisCommandInfo::new(name, args))
                 } else {
@@ -58,9 +59,6 @@ impl Handler {
 
                     let empty_rdb = Rdb::get_empty();
                     stream.write_all(&empty_rdb).await?;
-
-                    let mut store = store.lock().await;
-                    store.add_repl_streams(stream);
 
                     return Ok(());
                 }
