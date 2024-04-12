@@ -1,12 +1,6 @@
-use crate::{
-    protocol::parser::RespValue,
-    replica::ReplicaCommand,
-    store::{Entry, RedisStore},
-    stream::StreamInfo,
-};
-use anyhow::{anyhow, Result};
-use std::{sync::Arc, time::Duration};
-use tokio::sync::Mutex;
+use crate::{protocol::parser::RespValue, replica::ReplicaCommand, store::Entry};
+use anyhow::Result;
+use std::time::Duration;
 
 #[derive(Debug, Clone)]
 pub struct RedisCommandInfo {
@@ -27,54 +21,6 @@ pub enum RedisCommand {
 }
 
 impl RedisCommand {
-    pub async fn execute(
-        stream_info: &StreamInfo,
-        cmd_info: &mut RedisCommandInfo,
-        store: &Arc<Mutex<RedisStore>>,
-    ) -> Result<String> {
-        match cmd_info.to_command() {
-            Some(command) => match command {
-                Self::Ping => Ok(RespValue::SimpleString("PONG".to_string()).encode()),
-                Self::Echo(message) => Ok(RespValue::SimpleString(message).encode()),
-                Self::Get(key) => {
-                    if let Some(entry) = store.lock().await.get(key) {
-                        let response = format!("${}\r\n{}\r\n", entry.value.len(), entry.value);
-                        Ok(response)
-                    } else {
-                        Ok("$-1\r\n".to_string())
-                    }
-                }
-                Self::Set(key, entry) => {
-                    store.lock().await.set(key, entry);
-                    Ok(RespValue::SimpleString("OK".to_string()).encode())
-                }
-                Self::Info => {
-                    let response = format!(
-                        "# Replication\n\
-                        role:{}\n\
-                        connected_clients:{}\n\
-                        master_replid:{}\n\
-                        master_repl_offset:{}\n\
-                        ",
-                        stream_info.role,
-                        stream_info.connected_clients,
-                        stream_info.id,
-                        stream_info.offset
-                    );
-                    Ok(RespValue::BulkString(response).encode())
-                }
-                Self::Replconf => Ok(RespValue::SimpleString("OK".to_string()).encode()),
-                Self::Psync => Ok(RespValue::SimpleString(format!(
-                    "FULLRESYNC {} 0",
-                    stream_info.id
-                ))
-                .encode()),
-                _ => Err(anyhow!("Unknown command")),
-            },
-            None => Err(anyhow!("Invalid command info")),
-        }
-    }
-
     pub fn to_replica_command(&self) -> Option<ReplicaCommand> {
         match self {
             Self::Set(key, entry) => {
