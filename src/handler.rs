@@ -2,7 +2,7 @@ use crate::{
     command::{RedisCommand, RedisCommandInfo},
     protocol::{parser::RespValue, rdb::Rdb},
     replica::replicate_channel,
-    store::RedisStore,
+    store::Store,
     stream::StreamInfo,
 };
 use anyhow::{anyhow, Result};
@@ -40,7 +40,7 @@ impl Handler {
 
     pub async fn handle_stream(
         mut stream: TcpStream,
-        store: Arc<Mutex<RedisStore>>,
+        store: Arc<Mutex<Store>>,
         stream_info: Arc<Mutex<StreamInfo>>,
     ) {
         let mut full_resync = false;
@@ -160,7 +160,7 @@ impl Handler {
         }
     }
 
-    pub async fn handle_replica(mut stream: TcpStream, store: Arc<Mutex<RedisStore>>) {
+    pub async fn handle_replica(mut stream: TcpStream, store: Arc<Mutex<Store>>) {
         loop {
             let cmd_info = match Self::parse_command(&mut stream).await {
                 Ok(cmd_info) => cmd_info,

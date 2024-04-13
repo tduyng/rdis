@@ -31,17 +31,17 @@ impl Entry {
 }
 
 #[derive(Debug)]
-pub struct RedisStore {
+pub struct Store {
     pub data: HashMap<String, Entry>,
 }
 
-impl Default for RedisStore {
+impl Default for Store {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl RedisStore {
+impl Store {
     pub fn new() -> Self {
         Self {
             data: HashMap::new(),

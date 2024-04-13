@@ -4,7 +4,7 @@ use redis_starter_rust::{
     args::CliArgs,
     handler::Handler,
     replica::{handshake::perform_handshake_to_master, should_replicate},
-    store::RedisStore,
+    store::Store,
     stream::StreamInfo,
 };
 use std::sync::Arc;
@@ -14,7 +14,7 @@ use tokio::{net::TcpListener, sync::Mutex};
 async fn main() -> Result<()> {
     let args = CliArgs::parse();
     let stream_info = Arc::new(Mutex::new(StreamInfo::new(&args)));
-    let store = Arc::new(Mutex::new(RedisStore::new()));
+    let store = Arc::new(Mutex::new(Store::new()));
 
     if should_replicate(&stream_info).await {
         let info = stream_info.clone();
