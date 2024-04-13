@@ -1,5 +1,5 @@
 use crate::{
-    command::{RedisCommand, RedisCommandInfo},
+    command::{Command, CommandInfo},
     protocol::{parser::RespValue, rdb::Rdb},
     replica::replicate_channel,
     store::Store,
@@ -17,7 +17,7 @@ use tokio::{
 pub struct Handler {}
 
 impl Handler {
-    pub async fn parse_command(stream: &mut TcpStream) -> Result<RedisCommandInfo> {
+    pub async fn parse_command(stream: &mut TcpStream) -> Result<CommandInfo> {
         let mut buffer = BytesMut::with_capacity(512);
         let bytes_to_read = stream.read_buf(&mut buffer).await?;
         if bytes_to_read == 0 {
@@ -29,7 +29,7 @@ impl Handler {
                 if let Some(name) = a.first().and_then(|v| unpack_bulk_str(v.clone())) {
                     let args: Vec<String> =
                         a.into_iter().skip(1).filter_map(unpack_bulk_str).collect();
-                    Ok(RedisCommandInfo::new(name, args))
+                    Ok(CommandInfo::new(name, args))
                 } else {
                     Err(anyhow!("Invalid command format"))
                 }
@@ -70,18 +70,18 @@ impl Handler {
                 Some(command) => {
                     let command_clone = command.clone();
                     match command {
-                        RedisCommand::Ping => {
+                        Command::Ping => {
                             write_response(
                                 &mut stream,
                                 RespValue::SimpleString("PONG".to_string()).encode(),
                             )
                             .await
                         }
-                        RedisCommand::Echo(message) => {
+                        Command::Echo(message) => {
                             write_response(&mut stream, RespValue::SimpleString(message).encode())
                                 .await;
                         }
-                        RedisCommand::Get(key) => {
+                        Command::Get(key) => {
                             let response = if let Some(entry) = store.lock().await.get(key) {
                                 format!("${}\r\n{}\r\n", entry.value.len(), entry.value)
                             } else {
@@ -89,7 +89,7 @@ impl Handler {
                             };
                             write_response(&mut stream, response).await;
                         }
-                        RedisCommand::Set(key, entry) => {
+                        Command::Set(key, entry) => {
                             dbg!(
                                 "Set command with key {} entry {:?}",
                                 key.clone(),
@@ -115,7 +115,7 @@ impl Handler {
                                 }
                             }
                         }
-                        RedisCommand::Info => {
+                        Command::Info => {
                             let info = stream_info.lock().await;
                             let response = format!(
                                 "# Replication\n\
@@ -129,14 +129,14 @@ impl Handler {
                             write_response(&mut stream, RespValue::BulkString(response).encode())
                                 .await;
                         }
-                        RedisCommand::Replconf => {
+                        Command::Replconf => {
                             write_response(
                                 &mut stream,
                                 RespValue::SimpleString("OK".to_string()).encode(),
                             )
                             .await;
                         }
-                        RedisCommand::Psync => {
+                        Command::Psync => {
                             let response = RespValue::SimpleString(format!(
                                 "FULLRESYNC {} 0",
                                 stream_info.lock().await.id
@@ -171,7 +171,7 @@ impl Handler {
 
             match cmd_info.to_command() {
                 Some(command) => match command {
-                    RedisCommand::Set(key, value) => {
+                    Command::Set(key, value) => {
                         store.lock().await.set(key, value);
                     }
                     _ => {}

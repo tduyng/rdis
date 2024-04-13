@@ -3,13 +3,13 @@ use anyhow::Result;
 use std::time::Duration;
 
 #[derive(Debug, Clone)]
-pub struct RedisCommandInfo {
+pub struct CommandInfo {
     pub name: String,
     pub args: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
-pub enum RedisCommand {
+pub enum Command {
     Echo(String),
     Ping,
     Quit,
@@ -20,7 +20,7 @@ pub enum RedisCommand {
     Psync,
 }
 
-impl RedisCommand {
+impl Command {
     pub fn to_replica_command(&self) -> Option<ReplicaCommand> {
         match self {
             Self::Set(key, entry) => {
@@ -47,26 +47,26 @@ impl RedisCommand {
     }
 }
 
-impl RedisCommandInfo {
+impl CommandInfo {
     pub fn new(name: String, args: Vec<String>) -> Self {
-        RedisCommandInfo { name, args }
+        CommandInfo { name, args }
     }
 
-    pub fn to_command(&self) -> Option<RedisCommand> {
+    pub fn to_command(&self) -> Option<Command> {
         match self.name.to_lowercase().as_str() {
-            "ping" => Some(RedisCommand::Ping),
-            "echo" => Some(RedisCommand::Echo(self.args.join(" "))),
-            "get" => Some(RedisCommand::Get(self.args[0].clone())),
+            "ping" => Some(Command::Ping),
+            "echo" => Some(Command::Echo(self.args.join(" "))),
+            "get" => Some(Command::Get(self.args[0].clone())),
             "set" => {
                 let (key, value) = self.get_key_value().unwrap();
                 let expiry = self.get_expiry();
                 let entry = Entry::new(value, expiry);
 
-                Some(RedisCommand::Set(key, entry))
+                Some(Command::Set(key, entry))
             }
-            "info" => Some(RedisCommand::Info),
-            "replconf" => Some(RedisCommand::Replconf),
-            "psync" => Some(RedisCommand::Psync),
+            "info" => Some(Command::Info),
+            "replconf" => Some(Command::Replconf),
+            "psync" => Some(Command::Psync),
             _ => None,
         }
     }
