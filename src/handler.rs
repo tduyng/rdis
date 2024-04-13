@@ -174,6 +174,16 @@ impl Handler {
                     Command::Set(key, value) => {
                         store.lock().await.set(key, value);
                     }
+                    Command::Replconf(args) => {
+                        let command = args
+                            .first()
+                            .expect("Replconf args is required")
+                            .to_lowercase();
+                        if command == "getack" {
+                            let message = RespValue::encode_array_str(vec!["REPLCONF", "ACK", "0"]);
+                            write_response(&mut stream, message).await;
+                        }
+                    }
                     _ => {}
                 },
                 None => {
