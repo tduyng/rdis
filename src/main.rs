@@ -23,7 +23,7 @@ async fn main() -> Result<()> {
             let stream = perform_handshake_to_master(&info)
                 .await
                 .expect("Failed the handshake with the master");
-            let _ = Handler::handle_stream(stream, store, info).await;
+            let _ = Handler::handle_replica(stream, store).await;
         });
     }
 

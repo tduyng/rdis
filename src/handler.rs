@@ -159,6 +159,33 @@ impl Handler {
             }
         }
     }
+
+    pub async fn handle_replica(mut stream: TcpStream, store: Arc<Mutex<RedisStore>>) {
+        loop {
+            let cmd_info = match Self::parse_command(&mut stream).await {
+                Ok(cmd_info) => cmd_info,
+                Err(_) => {
+                    continue;
+                }
+            };
+
+            match cmd_info.to_command() {
+                Some(command) => match command {
+                    RedisCommand::Set(key, value) => {
+                        store.lock().await.set(key, value);
+                    }
+                    _ => {}
+                },
+                None => {
+                    write_response(
+                        &mut stream,
+                        RespValue::SimpleString("Invalid command".to_string()).encode(),
+                    )
+                    .await
+                }
+            }
+        }
+    }
 }
 
 fn unpack_bulk_str(value: RespValue) -> Option<String> {
