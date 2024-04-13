@@ -16,7 +16,7 @@ pub enum Command {
     Set(String, Entry),
     Get(String),
     Info,
-    Replconf,
+    Replconf(Vec<String>),
     Psync,
 }
 
@@ -53,10 +53,11 @@ impl CommandInfo {
     }
 
     pub fn to_command(&self) -> Option<Command> {
+        let args_clone = self.args.clone();
         match self.name.to_lowercase().as_str() {
             "ping" => Some(Command::Ping),
-            "echo" => Some(Command::Echo(self.args.join(" "))),
-            "get" => Some(Command::Get(self.args[0].clone())),
+            "echo" => Some(Command::Echo(args_clone.join(" "))),
+            "get" => Some(Command::Get(args_clone[0].clone())),
             "set" => {
                 let (key, value) = self.get_key_value().unwrap();
                 let expiry = self.get_expiry();
@@ -65,7 +66,7 @@ impl CommandInfo {
                 Some(Command::Set(key, entry))
             }
             "info" => Some(Command::Info),
-            "replconf" => Some(Command::Replconf),
+            "replconf" => Some(Command::Replconf(args_clone)),
             "psync" => Some(Command::Psync),
             _ => None,
         }

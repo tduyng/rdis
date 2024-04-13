@@ -129,7 +129,7 @@ impl Handler {
                             write_response(&mut stream, RespValue::BulkString(response).encode())
                                 .await;
                         }
-                        Command::Replconf => {
+                        Command::Replconf(_args) => {
                             write_response(
                                 &mut stream,
                                 RespValue::SimpleString("OK".to_string()).encode(),
