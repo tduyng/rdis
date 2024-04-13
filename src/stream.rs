@@ -6,14 +6,14 @@ use tokio::sync::Mutex;
 #[derive(Debug, Clone, PartialEq)]
 pub enum StreamType {
     Master,
-    Slave(SocketAddr),
+    Replica(SocketAddr),
 }
 
 impl fmt::Display for StreamType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let str = match self {
             Self::Master => "master",
-            Self::Slave(_) => "slave",
+            Self::Replica(_) => "slave",
         };
         write!(f, "{}", str)
     }
@@ -32,7 +32,7 @@ pub struct StreamInfo {
 impl StreamInfo {
     pub fn new(args: &CliArgs) -> Self {
         let role = if let Some(addr) = parse_replication_addr(args) {
-            StreamType::Slave(addr)
+            StreamType::Replica(addr)
         } else {
             StreamType::Master
         };

@@ -96,6 +96,12 @@ impl Handler {
                                 entry.clone()
                             );
                             store.lock().await.set(key, entry);
+                            write_response(
+                                &mut stream,
+                                RespValue::SimpleString("OK".to_string()).encode(),
+                            )
+                            .await;
+
                             for replication in stream_info
                                 .lock()
                                 .await
@@ -108,12 +114,6 @@ impl Handler {
                                     _ = replication.sender.send(replica_command).await;
                                 }
                             }
-
-                            write_response(
-                                &mut stream,
-                                RespValue::SimpleString("OK".to_string()).encode(),
-                            )
-                            .await;
                         }
                         RedisCommand::Info => {
                             let info = stream_info.lock().await;
