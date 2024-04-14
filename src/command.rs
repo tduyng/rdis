@@ -1,4 +1,4 @@
-use crate::{protocol::parser::RespValue, replica::ReplicaCommand, store::Entry};
+use crate::{protocol::parser::Message, replica::ReplicaCommand, store::Entry};
 use anyhow::Result;
 use std::time::Duration;
 
@@ -25,18 +25,18 @@ impl Command {
         match self {
             Self::Set(key, entry) => {
                 let message = if entry.expiry_at.is_some() {
-                    RespValue::Array(vec![
-                        RespValue::BulkString("set".to_string()),
-                        RespValue::BulkString(key.clone()),
-                        RespValue::BulkString(entry.value.clone()),
-                        RespValue::BulkString("px".to_string()),
-                        RespValue::BulkString(entry.expiry_time.unwrap().as_millis().to_string()),
+                    Message::Array(vec![
+                        Message::Bulk("set".to_string()),
+                        Message::Bulk(key.clone()),
+                        Message::Bulk(entry.value.clone()),
+                        Message::Bulk("px".to_string()),
+                        Message::Bulk(entry.expiry_time.unwrap().as_millis().to_string()),
                     ])
                 } else {
-                    RespValue::Array(vec![
-                        RespValue::BulkString("set".to_string()),
-                        RespValue::BulkString(key.clone()),
-                        RespValue::BulkString(entry.value.clone()),
+                    Message::Array(vec![
+                        Message::Bulk("set".to_string()),
+                        Message::Bulk(key.clone()),
+                        Message::Bulk(entry.value.clone()),
                     ])
                 };
 
@@ -74,11 +74,11 @@ impl CommandInfo {
 
     pub fn encode(&self) -> String {
         let mut array_values = Vec::with_capacity(self.args.len() + 1);
-        array_values.push(RespValue::BulkString(self.name.clone()));
+        array_values.push(Message::Bulk(self.name.clone()));
         for arg in &self.args {
-            array_values.push(RespValue::BulkString(arg.clone()));
+            array_values.push(Message::Bulk(arg.clone()));
         }
-        RespValue::Array(array_values).encode()
+        Message::Array(array_values).encode()
     }
 
     pub fn is_write(&self) -> bool {

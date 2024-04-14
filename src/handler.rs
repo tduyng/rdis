@@ -1,6 +1,6 @@
 use crate::{
     command::{Command, CommandInfo},
-    protocol::{parser::RespValue, rdb::Rdb},
+    protocol::{parser::Message, rdb::Rdb},
     replica::replicate_channel,
     store::Store,
     stream::StreamInfo,
@@ -23,9 +23,9 @@ impl Handler {
         if bytes_to_read == 0 {
             return Err(anyhow!("Empty buffer!"));
         };
-        let (value, _) = RespValue::decode(buffer)?;
+        let (value, _) = Message::decode(buffer)?;
         match value {
-            RespValue::Array(a) => {
+            Message::Array(a) => {
                 if let Some(name) = a.first().and_then(|v| unpack_bulk_str(v.clone())) {
                     let args: Vec<String> =
                         a.into_iter().skip(1).filter_map(unpack_bulk_str).collect();
@@ -73,12 +73,12 @@ impl Handler {
                         Command::Ping => {
                             write_response(
                                 &mut stream,
-                                RespValue::SimpleString("PONG".to_string()).encode(),
+                                Message::Simple("PONG".to_string()).encode(),
                             )
                             .await
                         }
                         Command::Echo(message) => {
-                            write_response(&mut stream, RespValue::SimpleString(message).encode())
+                            write_response(&mut stream, Message::Simple(message).encode())
                                 .await;
                         }
                         Command::Get(key) => {
@@ -98,7 +98,7 @@ impl Handler {
                             store.lock().await.set(key, entry);
                             write_response(
                                 &mut stream,
-                                RespValue::SimpleString("OK".to_string()).encode(),
+                                Message::Simple("OK".to_string()).encode(),
                             )
                             .await;
 
@@ -126,18 +126,18 @@ impl Handler {
                                 ",
                                 info.role, info.connected_clients, info.id, info.offset
                             );
-                            write_response(&mut stream, RespValue::BulkString(response).encode())
+                            write_response(&mut stream, Message::Bulk(response).encode())
                                 .await;
                         }
                         Command::Replconf(_args) => {
                             write_response(
                                 &mut stream,
-                                RespValue::SimpleString("OK".to_string()).encode(),
+                                Message::Simple("OK".to_string()).encode(),
                             )
                             .await;
                         }
                         Command::Psync => {
-                            let response = RespValue::SimpleString(format!(
+                            let response = Message::Simple(format!(
                                 "FULLRESYNC {} 0",
                                 stream_info.lock().await.id
                             ))
@@ -152,7 +152,7 @@ impl Handler {
                 None => {
                     write_response(
                         &mut stream,
-                        RespValue::SimpleString("Invalid command".to_string()).encode(),
+                        Message::Simple("Invalid command".to_string()).encode(),
                     )
                     .await
                 }
@@ -180,7 +180,7 @@ impl Handler {
                             .expect("Replconf args is required")
                             .to_lowercase();
                         if command == "getack" {
-                            let message = RespValue::encode_array_str(vec!["REPLCONF", "ACK", "0"]);
+                            let message = Message::encode_array_str(vec!["REPLCONF", "ACK", "0"]);
                             write_response(&mut stream, message).await;
                         }
                     }
@@ -189,7 +189,7 @@ impl Handler {
                 None => {
                     write_response(
                         &mut stream,
-                        RespValue::SimpleString("Invalid command".to_string()).encode(),
+                        Message::Simple("Invalid command".to_string()).encode(),
                     )
                     .await
                 }
@@ -198,9 +198,9 @@ impl Handler {
     }
 }
 
-fn unpack_bulk_str(value: RespValue) -> Option<String> {
+fn unpack_bulk_str(value: Message) -> Option<String> {
     match value {
-        RespValue::BulkString(s) => Some(s),
+        Message::Bulk(s) => Some(s),
         _ => None,
     }
 }

@@ -1,6 +1,6 @@
 use crate::{
     handler::write_response,
-    protocol::parser::RespValue,
+    protocol::parser::Message,
     stream::{StreamInfo, StreamType},
 };
 use std::{net::SocketAddr, sync::Arc};
@@ -18,7 +18,7 @@ pub mod connection;
 
 #[derive(Debug)]
 pub struct ReplicaCommand {
-    pub message: RespValue,
+    pub message: Message,
 }
 #[derive(Debug)]
 pub struct ReplicaHandle {
