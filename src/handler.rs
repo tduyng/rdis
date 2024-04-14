@@ -189,6 +189,11 @@ impl Handler {
                                 _ = replica_connection.write_message(message).await;
                             }
                         }
+                        Command::Wait => {
+                            _ = replica_connection
+                                .write_message(Message::Simple("OK".to_string()))
+                                .await;
+                        }
                         _ => {}
                     },
                     None => {
