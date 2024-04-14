@@ -1,11 +1,10 @@
 use crate::{
-    handler::write_response,
+    connection::Connection,
     message::Message,
     stream::{StreamInfo, StreamType},
 };
 use std::{net::SocketAddr, sync::Arc};
 use tokio::{
-    net::TcpStream,
     sync::{
         mpsc::{self, Receiver, Sender},
         Mutex,
@@ -27,14 +26,14 @@ pub struct ReplicaHandle {
     pub receiver: Receiver<ReplicaCommand>,
 }
 
-pub fn replicate_channel(mut stream: TcpStream) -> (ReplicaHandle, JoinHandle<()>) {
+pub fn replicate_channel(mut connection: Connection) -> (ReplicaHandle, JoinHandle<()>) {
     let (tx_res, mut rx) = mpsc::channel::<ReplicaCommand>(32);
     let (_tx, rx_res) = mpsc::channel::<ReplicaCommand>(32);
     let handle = tokio::spawn(async move {
         loop {
             dbg!("wait for response");
             while let Some(replica_command) = rx.recv().await {
-                write_response(&mut stream, replica_command.message.encode()).await;
+                _ = connection.write_message(replica_command.message).await;
             }
         }
     });

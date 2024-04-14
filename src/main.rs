@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use redis_starter_rust::{
     args::CliArgs,
+    connection::Connection,
     handler::Handler,
     replica::{handshake::perform_handshake_to_master, should_replicate},
     store::Store,
@@ -20,10 +21,11 @@ async fn main() -> Result<()> {
         let info = stream_info.clone();
         let store = store.clone();
         tokio::spawn(async move {
-            let stream = perform_handshake_to_master(&info)
+            let mut replica_connection = perform_handshake_to_master(&info)
                 .await
                 .expect("Failed the handshake with the master");
-            let _ = Handler::handle_replica(stream, store).await;
+            _ = replica_connection.get_rdb().await;
+            Handler::handle_replica(replica_connection, store).await;
         });
     }
 
@@ -41,10 +43,11 @@ async fn main() -> Result<()> {
             .accept()
             .await
             .context("failed to accept incoming connection")?;
+        let connection = Connection::bind(stream);
         println!("Accepted new connection");
 
         tokio::spawn(async move {
-            let _ = Handler::handle_stream(stream, store, stream_info).await;
+            let _ = Handler::handle_stream(connection, store, stream_info).await;
         });
     }
 }
