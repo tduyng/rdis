@@ -44,8 +44,9 @@ impl Handler {
                 }
                 let (repl_handle, handle) = replicate_channel(connection);
                 {
-                    let stream_info = stream_info.lock().await;
+                    let mut stream_info = stream_info.lock().await;
                     stream_info.repl_handles.lock().await.push(repl_handle);
+                    stream_info.connected_clients += 1;
                 }
                 _ = handle.await;
                 return;
@@ -131,7 +132,15 @@ impl Handler {
                                 full_resync = true;
                             }
                             Command::Wait => {
-                                _ = connection.write_bytes(b":0\r\n").await;
+                                _ = connection
+                                    .write_bytes(
+                                        format!(
+                                            ":{}\r\n",
+                                            stream_info.lock().await.connected_clients
+                                        )
+                                        .as_bytes(),
+                                    )
+                                    .await;
                             }
                             _ => break,
                         }
