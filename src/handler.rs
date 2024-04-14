@@ -1,6 +1,7 @@
 use crate::{
     command::{Command, CommandInfo},
-    protocol::{parser::Message, rdb::Rdb},
+    message::Message,
+    protocol::rdb::Rdb,
     replica::replicate_channel,
     store::Store,
     stream::StreamInfo,
@@ -78,8 +79,7 @@ impl Handler {
                             .await
                         }
                         Command::Echo(message) => {
-                            write_response(&mut stream, Message::Simple(message).encode())
-                                .await;
+                            write_response(&mut stream, Message::Simple(message).encode()).await;
                         }
                         Command::Get(key) => {
                             let response = if let Some(entry) = store.lock().await.get(key) {
@@ -96,11 +96,8 @@ impl Handler {
                                 entry.clone()
                             );
                             store.lock().await.set(key, entry);
-                            write_response(
-                                &mut stream,
-                                Message::Simple("OK".to_string()).encode(),
-                            )
-                            .await;
+                            write_response(&mut stream, Message::Simple("OK".to_string()).encode())
+                                .await;
 
                             for replication in stream_info
                                 .lock()
@@ -126,15 +123,11 @@ impl Handler {
                                 ",
                                 info.role, info.connected_clients, info.id, info.offset
                             );
-                            write_response(&mut stream, Message::Bulk(response).encode())
-                                .await;
+                            write_response(&mut stream, Message::Bulk(response).encode()).await;
                         }
                         Command::Replconf(_args) => {
-                            write_response(
-                                &mut stream,
-                                Message::Simple("OK".to_string()).encode(),
-                            )
-                            .await;
+                            write_response(&mut stream, Message::Simple("OK".to_string()).encode())
+                                .await;
                         }
                         Command::Psync => {
                             let response = Message::Simple(format!(

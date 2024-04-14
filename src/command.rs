@@ -1,4 +1,4 @@
-use crate::{protocol::parser::Message, replica::ReplicaCommand, store::Entry};
+use crate::{message::Message, replica::ReplicaCommand, store::Entry};
 use anyhow::Result;
 use std::time::Duration;
 

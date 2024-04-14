@@ -1,9 +1,10 @@
 pub mod args;
 pub mod command;
+pub mod connection;
 pub mod handler;
+pub mod message;
 pub mod protocol;
 pub mod replica;
 pub mod store;
 pub mod stream;
 pub mod utils;
-pub mod connection;

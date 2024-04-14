@@ -1,6 +1,6 @@
 use crate::{
     handler::write_response,
-    protocol::parser::Message,
+    message::Message,
     stream::{StreamInfo, StreamType},
 };
 use std::{net::SocketAddr, sync::Arc};
@@ -13,8 +13,8 @@ use tokio::{
     task::JoinHandle,
 };
 
-pub mod handshake;
 pub mod connection;
+pub mod handshake;
 
 #[derive(Debug)]
 pub struct ReplicaCommand {

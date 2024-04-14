@@ -1,4 +1,4 @@
-use crate::{protocol::parser::Message, stream::StreamInfo};
+use crate::{message::Message, stream::StreamInfo};
 use anyhow::{anyhow, Result};
 use std::sync::Arc;
 use tokio::{
