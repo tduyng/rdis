@@ -130,6 +130,9 @@ impl Handler {
                                 _ = connection.write_message(message).await;
                                 full_resync = true;
                             }
+                            Command::Wait => {
+                                _ = connection.write_bytes(b":0\r\n").await;
+                            }
                             _ => break,
                         }
                     }

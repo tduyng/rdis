@@ -18,6 +18,7 @@ pub enum Command {
     Info,
     Replconf(Vec<String>),
     Psync,
+    Wait,
 }
 
 impl Command {
@@ -68,6 +69,7 @@ impl CommandInfo {
             "info" => Some(Command::Info),
             "replconf" => Some(Command::Replconf(args_clone)),
             "psync" => Some(Command::Psync),
+            "wait" => Some(Command::Wait),
             _ => None,
         }
     }
