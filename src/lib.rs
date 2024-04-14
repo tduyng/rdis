@@ -6,3 +6,4 @@ pub mod replica;
 pub mod store;
 pub mod stream;
 pub mod utils;
+pub mod connection;

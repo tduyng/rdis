@@ -14,6 +14,7 @@ use tokio::{
 };
 
 pub mod handshake;
+pub mod connection;
 
 #[derive(Debug)]
 pub struct ReplicaCommand {
