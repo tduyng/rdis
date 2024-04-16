@@ -18,12 +18,12 @@ pub enum Command {
     Info,
     Replconf(Vec<String>),
     Psync,
-    Wait,
+    Wait(u64),
 }
 
 impl Command {
-    pub fn to_replica_command(&self) -> Option<ReplicaCommand> {
-        match self {
+    pub fn to_replica_command(cmd: &Command) -> Option<ReplicaCommand> {
+        match cmd {
             Self::Set(key, entry) => {
                 let message = if entry.expiry_at.is_some() {
                     Message::Array(vec![
@@ -41,7 +41,10 @@ impl Command {
                     ])
                 };
 
-                Some(ReplicaCommand { message })
+                Some(ReplicaCommand {
+                    message,
+                    timeout: None,
+                })
             }
             _ => None,
         }
@@ -69,7 +72,10 @@ impl CommandInfo {
             "info" => Some(Command::Info),
             "replconf" => Some(Command::Replconf(args_clone)),
             "psync" => Some(Command::Psync),
-            "wait" => Some(Command::Wait),
+            "wait" => {
+                let timeout = self.args[1].parse::<u64>().unwrap(); // first args is number of replicas
+                Some(Command::Wait(timeout))
+            }
             _ => None,
         }
     }

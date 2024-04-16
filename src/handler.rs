@@ -1,146 +1,62 @@
 use crate::{
-    command::{Command, CommandInfo},
+    command::Command,
     connection::Connection,
     message::Message,
     protocol::rdb::Rdb,
-    replica::{connection::ReplicaConnection, replicate_channel},
-    store::Store,
+    replica::{replicate_channel, ReplicaCommand},
+    store::{Entry, Store},
     stream::StreamInfo,
 };
-use anyhow::{anyhow, Result};
-use std::sync::Arc;
+use anyhow::Result;
+use std::{sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 
 pub struct Handler {}
 
 impl Handler {
-    pub async fn parse_command(message: Message) -> Result<CommandInfo> {
-        match message {
-            Message::Array(a) => {
-                if let Some(name) = a.first().and_then(|v| unpack_bulk_str(v.clone())) {
-                    let args: Vec<String> =
-                        a.into_iter().skip(1).filter_map(unpack_bulk_str).collect();
-                    Ok(CommandInfo::new(name, args))
-                } else {
-                    Err(anyhow!("Invalid command format"))
-                }
-            }
-            _ => Err(anyhow!("Unexpected command format: {:?}", message)),
-        }
-    }
-
     pub async fn handle_stream(
         mut connection: Connection,
         store: Arc<Mutex<Store>>,
         stream_info: Arc<Mutex<StreamInfo>>,
-    ) {
+    ) -> Result<()> {
         let mut full_resync = false;
 
         loop {
             if full_resync {
-                {
-                    let empty_rdb = Rdb::get_empty();
-                    let _ = connection.write_bytes(&empty_rdb).await;
-                }
-                let (repl_handle, handle) = replicate_channel(connection);
-                {
-                    let mut stream_info = stream_info.lock().await;
-                    stream_info.repl_handles.lock().await.push(repl_handle);
-                    stream_info.connected_clients += 1;
-                }
-                _ = handle.await;
-                return;
+                process_full_resync(connection, &stream_info).await?;
+                return Ok(());
             }
             if let Some(message) = connection.read_message().await {
-                let cmd_info = match Self::parse_command(message).await {
-                    Ok(cmd_info) => cmd_info,
-                    Err(_) => {
-                        continue;
-                    }
-                };
+                let cmd_info = Message::parse_command(message).await?;
 
                 match cmd_info.to_command() {
                     Some(command) => {
                         let command_clone = command.clone();
                         match command {
-                            Command::Ping => {
-                                _ = connection
-                                    .write_message(Message::Simple("PONG".to_string()))
-                                    .await;
-                            }
+                            Command::Ping => process_ping(&mut connection).await?,
                             Command::Echo(message) => {
-                                _ = connection.write_message(Message::Simple(message)).await;
+                                process_echo(&mut connection, message).await?
                             }
-                            Command::Get(key) => {
-                                let response = if let Some(entry) = store.lock().await.get(key) {
-                                    format!("${}\r\n{}\r\n", entry.value.len(), entry.value)
-                                } else {
-                                    "$-1\r\n".to_string()
-                                };
-                                _ = connection.write_bytes(response.as_bytes()).await;
-                            }
+                            Command::Get(key) => process_get(&mut connection, &store, key).await?,
                             Command::Set(key, entry) => {
-                                dbg!(
-                                    "Set command with key {} entry {:?}",
-                                    key.clone(),
-                                    entry.clone()
-                                );
-                                store.lock().await.set(key, entry);
-                                _ = connection
-                                    .write_message(Message::Simple("OK".to_string()))
-                                    .await;
-
-                                for replication in stream_info
-                                    .lock()
-                                    .await
-                                    .repl_handles
-                                    .lock()
-                                    .await
-                                    .iter_mut()
-                                {
-                                    if let Some(replica_command) =
-                                        command_clone.to_replica_command()
-                                    {
-                                        _ = replication.sender.send(replica_command).await;
-                                    }
-                                }
+                                process_set(
+                                    &mut connection,
+                                    &store,
+                                    &stream_info,
+                                    &command_clone,
+                                    key,
+                                    entry,
+                                )
+                                .await?
                             }
-                            Command::Info => {
-                                let info = stream_info.lock().await;
-                                let response = format!(
-                                    "# Replication\n\
-                                    role:{}\n\
-                                    connected_clients:{}\n\
-                                    master_replid:{}\n\
-                                    master_repl_offset:{}\n\
-                                    ",
-                                    info.role, info.connected_clients, info.id, info.offset
-                                );
-                                _ = connection.write_message(Message::Bulk(response)).await;
-                            }
-                            Command::Replconf(_args) => {
-                                _ = connection
-                                    .write_message(Message::Simple("OK".to_string()))
-                                    .await;
-                            }
+                            Command::Info => process_info(&mut connection, &stream_info).await?,
+                            Command::Replconf(_) => process_replconf(&mut connection).await?,
                             Command::Psync => {
-                                let message = Message::Simple(format!(
-                                    "FULLRESYNC {} 0",
-                                    stream_info.lock().await.id
-                                ));
-                                _ = connection.write_message(message).await;
+                                process_psync(&mut connection, &stream_info).await?;
                                 full_resync = true;
                             }
-                            Command::Wait => {
-                                _ = connection
-                                    .write_bytes(
-                                        format!(
-                                            ":{}\r\n",
-                                            stream_info.lock().await.connected_clients
-                                        )
-                                        .as_bytes(),
-                                    )
-                                    .await;
+                            Command::Wait(timeout) => {
+                                process_wait(&mut connection, &store, &stream_info, timeout).await?
                             }
                             _ => break,
                         }
@@ -153,68 +69,160 @@ impl Handler {
                 }
             }
         }
-    }
-
-    pub async fn handle_replica(
-        mut replica_connection: ReplicaConnection,
-        store: Arc<Mutex<Store>>,
-    ) {
-        let mut bytes_received = 0;
-
-        loop {
-            if let Some(message) = replica_connection.get_response().await {
-                let cmd_info = match Self::parse_command(message.clone()).await {
-                    Ok(cmd_info) => cmd_info,
-                    Err(_) => {
-                        continue;
-                    }
-                };
-
-                match cmd_info.to_command() {
-                    Some(command) => match command {
-                        Command::Set(key, value) => {
-                            store.lock().await.set(key, value);
-                        }
-                        Command::Replconf(args) => {
-                            let command = args
-                                .first()
-                                .expect("Replconf args is required")
-                                .to_lowercase();
-                            if command == "getack" {
-                                let message = Message::Array(vec![
-                                    Message::Bulk("REPLCONF".to_string()),
-                                    Message::Bulk("ACK".to_string()),
-                                    Message::Bulk(bytes_received.to_string()),
-                                ]);
-                                _ = replica_connection.write_message(message).await;
-                            }
-                        }
-                        Command::Wait => {
-                            _ = replica_connection
-                                .write_message(Message::Simple("OK".to_string()))
-                                .await;
-                        }
-                        _ => {}
-                    },
-                    None => {
-                        _ = replica_connection
-                            .write_message(Message::Simple("Invalid command".to_string()))
-                            .await;
-                    }
-                }
-                let message_len = message.encode().as_bytes().len();
-                bytes_received += message_len;
-            } else {
-                println!("Unable to get a message from the stream");
-                break;
-            }
-        }
+        Ok(())
     }
 }
 
-fn unpack_bulk_str(value: Message) -> Option<String> {
-    match value {
-        Message::Bulk(s) => Some(s),
-        _ => None,
+async fn process_ping(connection: &mut Connection) -> Result<()> {
+    connection
+        .write_message(Message::Simple("PONG".to_string()))
+        .await
+}
+
+async fn process_echo(connection: &mut Connection, message: String) -> Result<()> {
+    connection.write_message(Message::Simple(message)).await
+}
+
+async fn process_get(
+    connection: &mut Connection,
+    store: &Arc<Mutex<Store>>,
+    key: String,
+) -> Result<()> {
+    let response = if let Some(entry) = store.lock().await.get(key) {
+        format!("${}\r\n{}\r\n", entry.value.len(), entry.value)
+    } else {
+        "$-1\r\n".to_string()
+    };
+    connection.write_bytes(response.as_bytes()).await
+}
+
+async fn process_set(
+    connection: &mut Connection,
+    store: &Arc<Mutex<Store>>,
+    stream_info: &Arc<Mutex<StreamInfo>>,
+    command: &Command,
+    key: String,
+    entry: Entry,
+) -> Result<()> {
+    store.lock().await.set(key, entry);
+    connection
+        .write_message(Message::Simple("OK".to_string()))
+        .await?;
+
+    for replication in stream_info
+        .lock()
+        .await
+        .repl_handles
+        .lock()
+        .await
+        .iter_mut()
+    {
+        if let Some(replica_command) = Command::to_replica_command(command) {
+            replication.sender.send(replica_command).await?;
+        }
     }
+    Ok(())
+}
+
+async fn process_info(
+    connection: &mut Connection,
+    stream_info: &Arc<Mutex<StreamInfo>>,
+) -> Result<()> {
+    let info = stream_info.lock().await;
+    let response = format!(
+        "# Replication\n\
+        role:{}\n\
+        connected_clients:{}\n\
+        master_replid:{}\n\
+        master_repl_offset:{}\n\
+        ",
+        info.role, info.connected_clients, info.id, info.offset
+    );
+    connection.write_message(Message::Bulk(response)).await
+}
+
+async fn process_replconf(connection: &mut Connection) -> Result<()> {
+    connection
+        .write_message(Message::Simple("OK".to_string()))
+        .await
+}
+
+async fn process_psync(
+    connection: &mut Connection,
+    stream_info: &Arc<Mutex<StreamInfo>>,
+) -> Result<()> {
+    let message = Message::Simple(format!("FULLRESYNC {} 0", stream_info.lock().await.id));
+    connection.write_message(message).await
+}
+
+async fn process_full_resync(
+    mut connection: Connection,
+    stream_info: &Arc<Mutex<StreamInfo>>,
+) -> Result<()> {
+    {
+        let empty_rdb = Rdb::get_empty();
+        let _ = connection.write_bytes(&empty_rdb).await;
+    }
+    let (repl_handle, handle) = replicate_channel(connection);
+    {
+        let mut stream_info = stream_info.lock().await;
+        stream_info.repl_handles.lock().await.push(repl_handle);
+        stream_info.connected_clients += 1;
+    }
+    handle.await?;
+    Ok(())
+}
+
+async fn process_wait(
+    connection: &mut Connection,
+    store: &Arc<Mutex<Store>>,
+    stream_info: &Arc<Mutex<StreamInfo>>,
+    timeout: u64,
+) -> Result<()> {
+    let mut count = 0;
+
+    if store.lock().await.is_empty() {
+        let num_replicas = stream_info.lock().await.repl_handles.lock().await.len();
+        connection
+            .write_message(Message::Int(num_replicas as isize))
+            .await?;
+    } else {
+        for replica in stream_info
+            .lock()
+            .await
+            .repl_handles
+            .lock()
+            .await
+            .iter_mut()
+        {
+            let message = Message::Array(vec![
+                Message::Bulk("REPLCONF".to_string()),
+                Message::Bulk("ACK".to_string()),
+                Message::Bulk("*".to_string()),
+            ]);
+            replica
+                .sender
+                .send(ReplicaCommand::new(
+                    message,
+                    Some(Duration::from_millis(timeout)),
+                ))
+                .await?;
+        }
+
+        for replica in stream_info
+            .lock()
+            .await
+            .repl_handles
+            .lock()
+            .await
+            .iter_mut()
+        {
+            let response = replica.receiver.recv().await.unwrap();
+            if !response.expired {
+                count += 1;
+            }
+        }
+        connection.write_message(Message::Int(count)).await?;
+    }
+    connection.write_message(Message::Int(count)).await
 }

@@ -1,13 +1,17 @@
 use anyhow::{anyhow, Result};
 use bytes::BytesMut;
 
-use crate::protocol::parser::{parse_int, read_until_crlf};
+use crate::{
+    command::CommandInfo,
+    protocol::parser::{parse_int, read_until_crlf},
+};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Message {
     Simple(String),
     Bulk(String),
     Array(Vec<Message>),
+    Int(isize),
 }
 
 impl Message {
@@ -35,6 +39,9 @@ impl Message {
                 }
                 result
             }
+            Message::Int(value) => {
+                format!(":{}\r\n", value)
+            }
         }
     }
 
@@ -44,6 +51,21 @@ impl Message {
             result.push_str(&Message::Bulk(value.to_string()).encode());
         }
         result
+    }
+
+    pub async fn parse_command(message: Message) -> Result<CommandInfo> {
+        match message {
+            Message::Array(a) => {
+                if let Some(name) = a.first().and_then(|v| unpack_bulk_str(v.clone())) {
+                    let args: Vec<String> =
+                        a.into_iter().skip(1).filter_map(unpack_bulk_str).collect();
+                    Ok(CommandInfo::new(name, args))
+                } else {
+                    Err(anyhow!("Invalid command format"))
+                }
+            }
+            _ => Err(anyhow!("Unexpected command format: {:?}", message)),
+        }
     }
 }
 
@@ -87,4 +109,11 @@ pub fn parse_bulk_string(buffer: BytesMut) -> Result<(Message, usize)> {
         )?),
         total_parsed,
     ))
+}
+
+pub fn unpack_bulk_str(value: Message) -> Option<String> {
+    match value {
+        Message::Bulk(s) => Some(s),
+        _ => None,
+    }
 }

@@ -4,7 +4,7 @@ use redis_starter_rust::{
     args::CliArgs,
     connection::Connection,
     handler::Handler,
-    replica::{handshake::perform_handshake_to_master, should_replicate},
+    replica::{handler::ReplicaHandler, handshake::perform_handshake_to_master, should_replicate},
     store::Store,
     stream::StreamInfo,
 };
@@ -24,8 +24,8 @@ async fn main() -> Result<()> {
             let mut replica_connection = perform_handshake_to_master(&info)
                 .await
                 .expect("Failed the handshake with the master");
-            _ = replica_connection.get_rdb().await;
-            Handler::handle_replica(replica_connection, store).await;
+            replica_connection.get_rdb().await;
+            _ = ReplicaHandler::handle_replica(replica_connection, store).await;
         });
     }
 
