@@ -147,12 +147,12 @@ async fn process_wait(
 
     if store.lock().await.is_empty() {
         let num_replicas = stream_info.lock().await.repl_handles.lock().await.len();
-        connection.write_message(Message::Int(num_replicas as isize)).await?;
+        connection.write_message(Message::Int(num_replicas as isize)).await
     } else {
         for replica in stream_info.lock().await.repl_handles.lock().await.iter_mut() {
             let message = Message::Array(vec![
                 Message::Bulk("REPLCONF".to_string()),
-                Message::Bulk("ACK".to_string()),
+                Message::Bulk("GETACK".to_string()),
                 Message::Bulk("*".to_string()),
             ]);
             replica
@@ -167,7 +167,6 @@ async fn process_wait(
                 count += 1;
             }
         }
-        connection.write_message(Message::Int(count)).await?;
+        connection.write_message(Message::Int(count)).await
     }
-    connection.write_message(Message::Int(count)).await
 }
