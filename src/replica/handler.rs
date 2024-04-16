@@ -11,10 +11,7 @@ use tokio::sync::Mutex;
 pub struct ReplicaHandler {}
 
 impl ReplicaHandler {
-    pub async fn handle_replica(
-        mut replica_connection: ReplicaConnection,
-        store: Arc<Mutex<Store>>,
-    ) -> Result<()> {
+    pub async fn handle_replica(mut replica_connection: ReplicaConnection, store: Arc<Mutex<Store>>) -> Result<()> {
         let mut bytes_received = 0;
 
         loop {
@@ -57,10 +54,7 @@ async fn process_replconf(
     args: Vec<String>,
     bytes_received: usize,
 ) -> Result<()> {
-    let command = args
-        .first()
-        .expect("Replconf args is required")
-        .to_lowercase();
+    let command = args.first().expect("Replconf args is required").to_lowercase();
     if command == "getack" {
         let message = Message::Array(vec![
             Message::Bulk("REPLCONF".to_string()),

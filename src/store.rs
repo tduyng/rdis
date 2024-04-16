@@ -43,9 +43,7 @@ impl Default for Store {
 
 impl Store {
     pub fn new() -> Self {
-        Self {
-            data: HashMap::new(),
-        }
+        Self { data: HashMap::new() }
     }
     pub fn set(&mut self, key: String, entry: Entry) {
         self.data.insert(key, entry);

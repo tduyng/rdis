@@ -5,9 +5,7 @@ use tokio::{net::TcpStream, sync::Mutex};
 
 use super::{connection::ReplicaConnection, get_master_socket_addr};
 
-pub async fn perform_handshake_to_master(
-    stream_info: &Arc<Mutex<StreamInfo>>,
-) -> Result<ReplicaConnection> {
+pub async fn perform_handshake_to_master(stream_info: &Arc<Mutex<StreamInfo>>) -> Result<ReplicaConnection> {
     let stream_info = stream_info.lock().await;
     let socket_addr = get_master_socket_addr(&stream_info);
     if socket_addr.is_none() {

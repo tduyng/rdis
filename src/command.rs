@@ -41,10 +41,7 @@ impl Command {
                     ])
                 };
 
-                Some(ReplicaCommand {
-                    message,
-                    timeout: None,
-                })
+                Some(ReplicaCommand { message, timeout: None })
             }
             _ => None,
         }
@@ -96,9 +93,7 @@ impl CommandInfo {
 
     fn get_key_value(&self) -> Result<(String, String)> {
         if self.args.len() < 2 {
-            return Err(anyhow::anyhow!(
-                "SET command requires exactly two arguments"
-            ));
+            return Err(anyhow::anyhow!("SET command requires exactly two arguments"));
         }
         let key = self.args[0].clone();
         let value = self.args[1].clone();

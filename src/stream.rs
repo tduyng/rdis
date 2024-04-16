@@ -54,11 +54,7 @@ impl StreamInfo {
 fn parse_replication_addr(args: &CliArgs) -> Option<SocketAddr> {
     let addrr = match &args.replica {
         Some(replica_args) => {
-            let server = format!(
-                "{}:{}",
-                &replica_args[0],
-                &replica_args[1].parse::<u16>().unwrap()
-            );
+            let server = format!("{}:{}", &replica_args[0], &replica_args[1].parse::<u16>().unwrap());
 
             if let Ok(socket) = server.to_socket_addrs() {
                 let server: Vec<_> = socket.collect();
