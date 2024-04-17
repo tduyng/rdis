@@ -17,7 +17,7 @@ impl Handler {
     pub async fn handle_stream(
         mut connection: Connection,
         store: Arc<Mutex<Store>>,
-        stream_info: Arc<Mutex<StreamInfo>>,
+        stream_info: Arc<StreamInfo>,
     ) -> Result<()> {
         let mut full_resync = false;
 
@@ -86,7 +86,7 @@ async fn process_get(connection: &mut Connection, store: &Arc<Mutex<Store>>, key
 async fn process_set(
     connection: &mut Connection,
     store: &Arc<Mutex<Store>>,
-    stream_info: &Arc<Mutex<StreamInfo>>,
+    stream_info: &Arc<StreamInfo>,
     command: &Command,
     key: String,
     entry: Entry,
@@ -94,7 +94,7 @@ async fn process_set(
     store.lock().await.set(key, entry);
     connection.write_message(Message::Simple("OK".to_string())).await?;
 
-    for replication in stream_info.lock().await.repl_handles.lock().await.iter_mut() {
+    for replication in stream_info.repl_handles.lock().await.iter_mut() {
         if let Some(replica_command) = Command::to_replica_command(command) {
             replication.sender.send(replica_command).await?;
         }
@@ -102,8 +102,7 @@ async fn process_set(
     Ok(())
 }
 
-async fn process_info(connection: &mut Connection, stream_info: &Arc<Mutex<StreamInfo>>) -> Result<()> {
-    let info = stream_info.lock().await;
+async fn process_info(connection: &mut Connection, stream_info: &Arc<StreamInfo>) -> Result<()> {
     let response = format!(
         "# Replication\n\
         role:{}\n\
@@ -111,7 +110,10 @@ async fn process_info(connection: &mut Connection, stream_info: &Arc<Mutex<Strea
         master_replid:{}\n\
         master_repl_offset:{}\n\
         ",
-        info.role, info.connected_clients, info.id, info.offset
+        stream_info.role,
+        stream_info.count_replicas().await,
+        stream_info.id,
+        stream_info.offset
     );
     connection.write_message(Message::Bulk(response)).await
 }
@@ -120,21 +122,20 @@ async fn process_replconf(connection: &mut Connection) -> Result<()> {
     connection.write_message(Message::Simple("OK".to_string())).await
 }
 
-async fn process_psync(connection: &mut Connection, stream_info: &Arc<Mutex<StreamInfo>>) -> Result<()> {
-    let message = Message::Simple(format!("FULLRESYNC {} 0", stream_info.lock().await.id));
+async fn process_psync(connection: &mut Connection, stream_info: &Arc<StreamInfo>) -> Result<()> {
+    let message = Message::Simple(format!("FULLRESYNC {} 0", stream_info.id));
     connection.write_message(message).await
 }
 
-async fn process_full_resync(mut connection: Connection, stream_info: &Arc<Mutex<StreamInfo>>) -> Result<()> {
+async fn process_full_resync(mut connection: Connection, stream_info: &Arc<StreamInfo>) -> Result<()> {
+    let stream_info = stream_info.clone();
     {
         let empty_rdb = Rdb::get_empty();
         let _ = connection.write_bytes(&empty_rdb).await;
     }
     let (repl_handle, handle) = replicate_channel(connection);
     {
-        let mut stream_info = stream_info.lock().await;
         stream_info.repl_handles.lock().await.push(repl_handle);
-        stream_info.connected_clients += 1;
     }
     handle.await?;
     Ok(())
@@ -143,16 +144,16 @@ async fn process_full_resync(mut connection: Connection, stream_info: &Arc<Mutex
 async fn process_wait(
     connection: &mut Connection,
     store: &Arc<Mutex<Store>>,
-    stream_info: &Arc<Mutex<StreamInfo>>,
+    stream_info: &Arc<StreamInfo>,
     timeout: u64,
 ) -> Result<()> {
     let mut count = 0;
 
     if store.lock().await.is_empty() {
-        let num_replicas = stream_info.lock().await.repl_handles.lock().await.len();
+        let num_replicas = stream_info.repl_handles.lock().await.len();
         connection.write_message(Message::Int(num_replicas as isize)).await
     } else {
-        for replica in stream_info.lock().await.repl_handles.lock().await.iter_mut() {
+        for replica in stream_info.repl_handles.lock().await.iter_mut() {
             let message = Message::Array(vec![
                 Message::Bulk("REPLCONF".to_string()),
                 Message::Bulk("GETACK".to_string()),
@@ -164,7 +165,7 @@ async fn process_wait(
                 .await?;
         }
 
-        for replica in stream_info.lock().await.repl_handles.lock().await.iter_mut() {
+        for replica in stream_info.repl_handles.lock().await.iter_mut() {
             let response = replica.receiver.recv().await.unwrap();
             if !response.expired {
                 count += 1;
@@ -176,13 +177,13 @@ async fn process_wait(
 
 async fn process_config(
     connection: &mut Connection,
-    stream_info: &Arc<Mutex<StreamInfo>>,
+    stream_info: &Arc<StreamInfo>,
     action: String,
     key: String,
 ) -> Result<()> {
     match action.to_lowercase().as_str() {
         "get" => {
-            let config_value = stream_info.lock().await.config.lock().await.get_value(&key);
+            let config_value = stream_info.config.lock().await.get_value(&key);
             if let Some(value) = config_value {
                 let message = Message::Array(vec![Message::Bulk(key), Message::Bulk(value)]);
                 connection.write_message(message).await?

@@ -1,13 +1,12 @@
 use crate::{message::Message, stream::StreamInfo};
 use anyhow::{anyhow, Result};
 use std::sync::Arc;
-use tokio::{net::TcpStream, sync::Mutex};
+use tokio::net::TcpStream;
 
 use super::{connection::ReplicaConnection, get_master_socket_addr};
 
-pub async fn perform_handshake_to_master(stream_info: &Arc<Mutex<StreamInfo>>) -> Result<ReplicaConnection> {
-    let stream_info = stream_info.lock().await;
-    let socket_addr = get_master_socket_addr(&stream_info);
+pub async fn perform_handshake_to_master(stream_info: &Arc<StreamInfo>) -> Result<ReplicaConnection> {
+    let socket_addr = get_master_socket_addr(stream_info);
     if socket_addr.is_none() {
         return Err(anyhow!("invalid socket address"));
     }

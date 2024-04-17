@@ -5,10 +5,7 @@ use crate::{
 };
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tokio::{
-    sync::{
-        mpsc::{self, Receiver, Sender},
-        Mutex,
-    },
+    sync::mpsc::{self, Receiver, Sender},
     task::JoinHandle,
     time::timeout,
 };
@@ -79,8 +76,7 @@ pub fn replicate_channel(mut connection: Connection) -> (ReplicaHandle, JoinHand
     )
 }
 
-pub async fn should_replicate(stream_info: &Arc<Mutex<StreamInfo>>) -> bool {
-    let stream_info = stream_info.lock().await;
+pub async fn should_replicate(stream_info: &Arc<StreamInfo>) -> bool {
     match stream_info.role {
         StreamType::Master => false,
         StreamType::Replica(_) => true,

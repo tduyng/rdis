@@ -22,7 +22,6 @@ impl fmt::Display for StreamType {
 #[derive(Debug)]
 pub struct StreamInfo {
     pub role: StreamType,
-    pub connected_clients: usize,
     pub id: String,
     pub offset: u16,
     pub socket_addr: SocketAddr,
@@ -43,13 +42,16 @@ impl StreamInfo {
 
         Self {
             role,
-            connected_clients: 0,
             id: random_sha1_hex(),
             offset: 0,
             socket_addr,
             repl_handles: Mutex::new(Vec::new()),
             config: Mutex::new(RdbConfig::new()),
         }
+    }
+
+    pub async fn count_replicas(&self) -> usize {
+        self.repl_handles.lock().await.len()
     }
 }
 
