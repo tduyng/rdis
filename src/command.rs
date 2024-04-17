@@ -19,6 +19,7 @@ pub enum Command {
     Replconf(Vec<String>),
     Psync,
     Wait(u64),
+    Config(String, String),
 }
 
 impl Command {
@@ -72,6 +73,11 @@ impl CommandInfo {
             "wait" => {
                 let timeout = self.args[1].parse::<u64>().unwrap(); // first args is number of replicas
                 Some(Command::Wait(timeout))
+            }
+            "config" => {
+                let action = self.args[0].clone();
+                let key = self.args[1].clone();
+                Some(Command::Config(action, key))
             }
             _ => None,
         }

@@ -16,6 +16,12 @@ async fn main() -> Result<()> {
     let args = CliArgs::parse();
     let stream_info = Arc::new(Mutex::new(StreamInfo::new(&args)));
     let store = Arc::new(Mutex::new(Store::new()));
+    if let Some(dir) = args.dir {
+        stream_info.lock().await.config.lock().await.dir = Some(dir);
+    }
+    if let Some(dbfilename) = args.dbfilename {
+        stream_info.lock().await.config.lock().await.dbfilename = Some(dbfilename);
+    }
 
     if should_replicate(&stream_info).await {
         let info = stream_info.clone();

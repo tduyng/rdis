@@ -13,3 +13,32 @@ impl Rdb {
         result
     }
 }
+
+#[derive(Debug)]
+pub struct RdbConfig {
+    pub dir: Option<String>,
+    pub dbfilename: Option<String>,
+}
+
+impl Default for RdbConfig {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl RdbConfig {
+    pub fn new() -> Self {
+        RdbConfig {
+            dir: None,
+            dbfilename: None,
+        }
+    }
+
+    pub fn get_value(&self, key: &str) -> Option<String> {
+        match key.to_lowercase().as_str() {
+            "dir" => self.dir.clone(),
+            "dbfilename" => self.dbfilename.clone(),
+            _ => None,
+        }
+    }
+}

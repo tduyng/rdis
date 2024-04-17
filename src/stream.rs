@@ -1,4 +1,4 @@
-use crate::{args::CliArgs, replica::ReplicaHandle, utils::random_sha1_hex};
+use crate::{args::CliArgs, protocol::rdb::RdbConfig, replica::ReplicaHandle, utils::random_sha1_hex};
 use core::fmt;
 use std::net::{SocketAddr, ToSocketAddrs};
 use tokio::sync::Mutex;
@@ -27,6 +27,7 @@ pub struct StreamInfo {
     pub offset: u16,
     pub socket_addr: SocketAddr,
     pub repl_handles: Mutex<Vec<ReplicaHandle>>,
+    pub config: Mutex<RdbConfig>,
 }
 
 impl StreamInfo {
@@ -47,6 +48,7 @@ impl StreamInfo {
             offset: 0,
             socket_addr,
             repl_handles: Mutex::new(Vec::new()),
+            config: Mutex::new(RdbConfig::new()),
         }
     }
 }

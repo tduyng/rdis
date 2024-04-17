@@ -12,4 +12,10 @@ pub struct CliArgs {
 
     #[clap(short, long = "replicaof", value_names = &["MASTER_HOST", "MASTER_PORT"], num_args = 2)]
     pub replica: Option<Vec<String>>,
+
+    #[clap(long)]
+    pub dir: Option<String>,
+
+    #[clap(long)]
+    pub dbfilename: Option<String>,
 }

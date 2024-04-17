@@ -7,7 +7,7 @@ use crate::{
     store::{Entry, Store},
     stream::StreamInfo,
 };
-use anyhow::Result;
+use anyhow::{Ok, Result};
 use std::{sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 
@@ -47,6 +47,9 @@ impl Handler {
                             }
                             Command::Wait(timeout) => {
                                 process_wait(&mut connection, &store, &stream_info, timeout).await?
+                            }
+                            Command::Config(action, key) => {
+                                process_config(&mut connection, &stream_info, action, key).await?
                             }
                             _ => break,
                         }
@@ -169,4 +172,31 @@ async fn process_wait(
         }
         connection.write_message(Message::Int(count)).await
     }
+}
+
+async fn process_config(
+    connection: &mut Connection,
+    stream_info: &Arc<Mutex<StreamInfo>>,
+    action: String,
+    key: String,
+) -> Result<()> {
+    match action.to_lowercase().as_str() {
+        "get" => {
+            let config_value = stream_info.lock().await.config.lock().await.get_value(&key);
+            if let Some(value) = config_value {
+                let message = Message::Array(vec![Message::Bulk(key), Message::Bulk(value)]);
+                connection.write_message(message).await?
+            } else {
+                connection
+                    .write_message(Message::Simple("Value not found".to_string()))
+                    .await?
+            }
+        }
+        _ => {
+            connection
+                .write_message(Message::Simple("Unsupported config action".to_string()))
+                .await?
+        }
+    }
+    Ok(())
 }
