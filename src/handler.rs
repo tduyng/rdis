@@ -271,25 +271,13 @@ async fn get_xrange_end(store: &Arc<Mutex<Store>>, key: &str, id: &str) -> Optio
 }
 
 async fn process_xrange(connection: &mut Connection, store: &Arc<Mutex<Store>>, args: XRangArgs) -> Result<()> {
-    let err_msg = "ERR Unable to parse start ID".to_string();
-    let start = match get_xrange_start(&args.start).await {
-        Some(start) => start,
-        None => {
-            return connection.write_message(Message::Error(err_msg)).await;
-        }
-    };
+    let start = get_xrange_start(&args.start).await;
+    let end = get_xrange_end(store, &args.key, &args.end).await;
 
-    let end = match get_xrange_end(store, &args.key, &args.end).await {
-        Some(end) => end,
-        None => {
-            return connection.write_message(Message::Error(err_msg)).await;
-        }
-    };
-
-    let stream = match store.lock().await.get_stream_range(&args.key, Some(&start), Some(&end)) {
+    let stream = match store.lock().await.get_stream_range(&args.key, start, end) {
         Some(stream) => stream,
         None => {
-            return connection.write_message(Message::Error(err_msg)).await;
+            return connection.write_message(Message::Error("ERR Unable to parse start ID".to_string())).await;
         }
     };
 

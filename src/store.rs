@@ -176,17 +176,17 @@ impl Store {
         Rdb::parse_rdb(self, data)
     }
 
-    pub fn get_stream_range(&mut self, key: &str, start: Option<&StreamId>, end: Option<&StreamId>) -> Option<Stream> {
+    pub fn get_stream_range(&mut self, key: &str, start: Option<StreamId>, end: Option<StreamId>) -> Option<Stream> {
         let stream = self.get_stream(key)?;
         let mut range_entries: Vec<(StreamId, StreamData)> = Vec::new();
 
         for (id, data) in &stream.entries {
-            if let Some(start_id) = start {
+            if let Some(ref start_id) = start {
                 if id < start_id {
                     continue;
                 }
             }
-            if let Some(end_id) = end {
+            if let Some(ref end_id) = end {
                 if id > end_id {
                     break;
                 }
