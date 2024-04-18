@@ -32,8 +32,8 @@ pub struct XRangArgs {
 
 #[derive(Debug, Clone)]
 pub struct XReadArgs {
-    // pub block: Option<SystemTime>,
-    // pub wait: bool,
+    pub block: Option<SystemTime>,
+    pub wait: bool,
     pub requests: Vec<(String, StreamId)>,
 }
 
@@ -134,22 +134,39 @@ impl CommandInfo {
             })),
             "xread" => {
                 let mut marker = 0;
-                match self.args[0].to_lowercase().as_str() {
+                let first_args = &self.args[0];
+                let mut expiration_time: Option<SystemTime> = None;
+                let mut wait = false;
+
+                match first_args.to_lowercase().as_str() {
                     "streams" => marker += 1,
+                    "block" => {
+                        let duration = self.args[1].parse::<u64>().expect("Duration is not a valid number");
+                        wait = duration == 0;
+                        let exp_time = SystemTime::now() + Duration::from_millis(duration);
+                        expiration_time = Some(exp_time);
+                        marker += 3;
+                    }
                     _ => return None,
                 }
-                let amount_of_streams = (self.args.len() - marker) / 2;
+
                 let key_marker = marker;
+                let amount_of_streams = (self.args.len() - key_marker) / 2;
                 let id_marker = key_marker + amount_of_streams;
-                let mut requests = Vec::with_capacity(amount_of_streams);
+                let mut requests: Vec<(String, StreamId)> = Vec::with_capacity(amount_of_streams);
 
                 for i in 0..amount_of_streams {
                     let key = self.args[key_marker + i].clone();
-                    let id = StreamId::from(self.args[id_marker + i].as_str());
-                    requests.push((key, id));
+                    let id = self.args[id_marker + i].clone();
+                    let stream_id = StreamId::from(id.as_str());
+                    requests.push((key, stream_id));
                 }
 
-                Some(Command::XRead(XReadArgs { requests }))
+                Some(Command::XRead(XReadArgs {
+                    block: expiration_time,
+                    wait,
+                    requests,
+                }))
             }
             _ => None,
         }

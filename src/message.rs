@@ -13,6 +13,7 @@ pub enum Message {
     Array(Vec<Message>),
     Int(isize),
     Error(String),
+    Null,
 }
 
 impl Message {
@@ -44,6 +45,7 @@ impl Message {
                 format!(":{}\r\n", value)
             }
             Message::Error(s) => format!("-{}\r\n", s),
+            Message::Null => "$-1\r\n".to_string(),
         }
     }
 

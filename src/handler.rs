@@ -8,7 +8,10 @@ use crate::{
     stream::{StreamId, StreamInfo},
 };
 use anyhow::{Ok, Result};
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::Arc,
+    time::{Duration, SystemTime},
+};
 use tokio::sync::Mutex;
 
 pub struct Handler {}
@@ -301,21 +304,38 @@ async fn process_xrange(connection: &mut Connection, store: &Arc<Mutex<Store>>, 
 }
 
 async fn process_xread(connection: &mut Connection, store: &Arc<Mutex<Store>>, args: XReadArgs) -> Result<()> {
-    let mut store_lock = store.lock().await;
     let mut messages: Vec<Message> = Vec::new();
 
-    for (key, id) in args.requests {
-        match store_lock.get_stream_after_id(&key, &id) {
-            Some(stream) => {
-                messages.push(Message::Array(vec![Message::Bulk(key.clone()), stream.to_message()]));
+    loop {
+        messages.clear();
+
+        for request in args.requests.iter() {
+            let (key, id) = request;
+            let stream = store.lock().await.get_stream_after_id(key, id);
+            if stream.is_none() {
+                continue;
             }
-            None => {
-                return connection
-                    .write_message(Message::Error("ERR Unable to read stream".to_string()))
-                    .await
+            let stream = stream.unwrap();
+            messages.push(Message::Array(vec![Message::Bulk(key.clone()), stream.to_message()]));
+        }
+
+        if messages.len() == args.requests.len() {
+            break;
+        } else if let Some(timeout) = args.block {
+            let timed_out = SystemTime::now() > timeout;
+            if !args.wait && timed_out {
+                break;
+            } else {
+                tokio::time::sleep(Duration::from_micros(50)).await;
             }
+        } else {
+            break;
         }
     }
 
-    connection.write_message(Message::Array(messages)).await
+    if messages.is_empty() {
+        connection.write_message(Message::Null).await
+    } else {
+        connection.write_message(Message::Array(messages)).await
+    }
 }
