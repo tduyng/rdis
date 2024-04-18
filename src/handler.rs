@@ -247,6 +247,9 @@ async fn process_xadd(connection: &mut Connection, store: &Arc<Mutex<Store>>, ar
 }
 
 async fn get_xrange_start(id: &str) -> Option<StreamId> {
+    if id == "-" {
+        return None;
+    }
     let (ms, seq) = id.split_once('-').unwrap_or((id, "0"));
     let ms = ms.parse().expect("Unable to parse ms");
     let seq = seq.parse().expect("Unable to parse seq");
