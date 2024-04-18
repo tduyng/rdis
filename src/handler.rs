@@ -4,7 +4,7 @@ use crate::{
     message::Message,
     protocol::rdb::Rdb,
     replica::{replicate_channel, ReplicaCommand},
-    store::{Entry, Store},
+    store::{Entry, EntryValue, Store},
     stream::StreamInfo,
 };
 use anyhow::{Ok, Result};
@@ -224,14 +224,14 @@ async fn process_keys(connection: &mut Connection, store: &Arc<Mutex<Store>>, pa
 
 async fn process_type(connection: &mut Connection, store: &Arc<Mutex<Store>>, key: String) -> Result<()> {
     let store = store.lock().await;
-    let value = store.get_kv(&key);
+    let item = store.get_store_item(&key);
 
-    let response = match value {
-        Some(_) => "string",
-        None => "none",
+    let value_type = match item {
+        Some(x) => x.value_type(),
+        None => "none".to_string(),
     };
 
-    connection.write_message(Message::Simple(response.to_string())).await
+    connection.write_message(Message::Simple(value_type)).await
 }
 
 async fn process_xadd(connection: &mut Connection, store: &Arc<Mutex<Store>>, args: XaddArgs) -> Result<()> {
