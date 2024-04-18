@@ -196,6 +196,17 @@ impl Store {
 
         Some(Stream { entries: range_entries })
     }
+
+    pub fn get_stream_after_id(&mut self, key: &str, id: &StreamId) -> Option<Stream> {
+        let stream = self.get_stream(key)?;
+        let mut read_entries = Vec::new();
+        for (entry_id, entry_data) in &stream.entries {
+            if entry_id > id {
+                read_entries.push((entry_id.clone(), entry_data.clone()));
+            }
+        }
+        Some(Stream::new(read_entries))
+    }
 }
 
 fn build_stream_id(pattern: &str, last_stream_entry: Option<&StreamId>) -> Option<String> {

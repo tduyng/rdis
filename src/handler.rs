@@ -1,5 +1,5 @@
 use crate::{
-    command::{Command, XRangArgs, XAddArgs},
+    command::{Command, XAddArgs, XRangArgs},
     connection::Connection,
     message::Message,
     protocol::rdb::Rdb,
@@ -55,6 +55,7 @@ impl Handler {
                             Command::Type(key) => process_type(&mut connection, &store, key).await?,
                             Command::XAdd(args) => process_xadd(&mut connection, &store, args).await?,
                             Command::XRange(args) => process_xrange(&mut connection, &store, args).await?,
+                            Command::XRead(args) => process_xread(&mut connection, &store, args).await?,
                             _ => break,
                         }
                     }
@@ -277,7 +278,9 @@ async fn process_xrange(connection: &mut Connection, store: &Arc<Mutex<Store>>, 
     let stream = match store.lock().await.get_stream_range(&args.key, start, end) {
         Some(stream) => stream,
         None => {
-            return connection.write_message(Message::Error("ERR Unable to parse start ID".to_string())).await;
+            return connection
+                .write_message(Message::Error("ERR Unable to parse start ID".to_string()))
+                .await;
         }
     };
 
@@ -295,4 +298,28 @@ async fn process_xrange(connection: &mut Connection, store: &Arc<Mutex<Store>>, 
     connection.write_message(Message::Array(message_content)).await?;
 
     Ok(())
+}
+
+async fn process_xread(
+    connection: &mut Connection,
+    store: &Arc<Mutex<Store>>,
+    args: Vec<(String, StreamId)>,
+) -> Result<()> {
+    let mut store_lock = store.lock().await;
+    let mut messages: Vec<Message> = Vec::new();
+
+    for (key, id) in args {
+        match store_lock.get_stream_after_id(&key, &id) {
+            Some(stream) => {
+                messages.push(Message::Array(vec![Message::Bulk(key.clone()), stream.to_message()]));
+            }
+            None => {
+                return connection
+                    .write_message(Message::Error("ERR Unable to read stream".to_string()))
+                    .await
+            }
+        }
+    }
+
+    connection.write_message(Message::Array(messages)).await
 }

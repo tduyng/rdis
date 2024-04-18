@@ -1,4 +1,9 @@
-use crate::{message::Message, replica::ReplicaCommand, store::Entry, stream::StreamData};
+use crate::{
+    message::Message,
+    replica::ReplicaCommand,
+    store::Entry,
+    stream::{StreamData, StreamId},
+};
 use anyhow::Result;
 use std::{collections::HashMap, time::Duration};
 
@@ -38,6 +43,7 @@ pub enum Command {
     Type(String),
     XAdd(XAddArgs),
     XRange(XRangArgs),
+    XRead(Vec<(String, StreamId)>),
 }
 
 impl Command {
@@ -116,6 +122,25 @@ impl CommandInfo {
                 start: self.args[1].clone(),
                 end: self.args[2].clone(),
             })),
+            "xread" => {
+                let mut marker = 0;
+                match self.args[0].to_lowercase().as_str() {
+                    "streams" => marker += 1,
+                    _ => return None,
+                }
+                let amount_of_streams = (self.args.len() - marker) / 2;
+                let key_marker = marker;
+                let id_marker = key_marker + amount_of_streams;
+                let mut requests = Vec::with_capacity(amount_of_streams);
+
+                for i in 0..amount_of_streams {
+                    let key = self.args[key_marker + i].clone();
+                    let id = StreamId::from(self.args[id_marker + i].as_str());
+                    requests.push((key, id));
+                }
+
+                Some(Command::XRead(requests))
+            }
             _ => None,
         }
     }

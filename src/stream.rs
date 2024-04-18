@@ -1,4 +1,6 @@
-use crate::{args::CliArgs, protocol::rdb::RdbConfig, replica::ReplicaHandle, utils::random_sha1_hex};
+use crate::{
+    args::CliArgs, message::Message, protocol::rdb::RdbConfig, replica::ReplicaHandle, utils::random_sha1_hex,
+};
 use core::fmt;
 use std::{
     collections::HashMap,
@@ -81,6 +83,22 @@ impl Stream {
 
     pub fn empty() -> Self {
         Self { entries: Vec::new() }
+    }
+
+    pub fn to_message(&self) -> Message {
+        let mut message_content = Vec::new();
+        for (id, data) in &self.entries {
+            let mut message_data = Vec::new();
+            for (key, value) in data.data.iter() {
+                message_data.push(Message::Bulk(key.clone()));
+                message_data.push(Message::Bulk(value.clone()));
+            }
+            message_content.push(Message::Array(vec![
+                Message::Bulk(id.to_string()),
+                Message::Array(message_data),
+            ]));
+        }
+        Message::Array(message_content)
     }
 }
 
