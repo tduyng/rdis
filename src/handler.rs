@@ -236,7 +236,11 @@ async fn process_type(connection: &mut Connection, store: &Arc<Mutex<Store>>, ke
 
 async fn process_xadd(connection: &mut Connection, store: &Arc<Mutex<Store>>, args: XaddArgs) -> Result<()> {
     let mut store = store.lock().await;
-    store.set_stream(args.key, args.id.clone(), args.data)?;
 
+    if let Err(err) = store.validate_stream(&args.key, &args.id) {
+        return connection.write_message(Message::Error(err.to_string())).await;
+    }
+
+    store.set_stream(args.key, args.id.clone(), args.data)?;
     connection.write_message(Message::Bulk(args.id)).await
 }
