@@ -45,8 +45,7 @@ impl ReplicaHandler {
 }
 
 async fn process_set(store: &Arc<Mutex<Store>>, key: String, entry: Entry) -> Result<()> {
-    store.lock().await.set_kv(key, entry);
-    Ok(())
+    store.lock().await.set_kv(key, entry)
 }
 
 async fn process_replconf(

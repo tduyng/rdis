@@ -1,4 +1,7 @@
-use crate::{protocol::rdb::Rdb, stream::Stream};
+use crate::{
+    protocol::rdb::Rdb,
+    stream::{Stream, StreamData},
+};
 use anyhow::Result;
 use std::{
     collections::HashMap,
@@ -72,12 +75,13 @@ impl Store {
     pub fn new() -> Self {
         Self { data: HashMap::new() }
     }
-    pub fn set_kv(&mut self, key: String, entry: Entry) {
+    pub fn set_kv(&mut self, key: String, entry: Entry) -> Result<()> {
         self.data.insert(key, StoreItem::KeyValueEntry(entry));
+        Ok(())
     }
 
-    pub fn get_kv(&self, key: String) -> Option<&Entry> {
-        let store_item = self.data.get(&key)?;
+    pub fn get_kv(&self, key: &String) -> Option<&Entry> {
+        let store_item = self.data.get(key)?;
         let entry = if let StoreItem::KeyValueEntry(e) = store_item {
             e
         } else {
@@ -90,6 +94,30 @@ impl Store {
             }
         }
         Some(entry)
+    }
+
+    pub fn get_store_item(&self, key: &String) -> Option<&StoreItem> {
+        self.data.get(key)
+    }
+
+    pub fn get_stream(&mut self, key: &String) -> Option<&mut Stream> {
+        let item = self.data.get_mut(key)?;
+        if let StoreItem::Stream(stream) = item {
+            Some(stream)
+        } else {
+            None
+        }
+    }
+
+    pub fn set_stream(&mut self, key: String, id: String, stream_data: StreamData) -> Result<()> {
+        let stream = if let Some(stream) = self.get_stream(&key) {
+            stream
+        } else {
+            self.data.insert(key.clone(), StoreItem::Stream(Stream::new()));
+            self.get_stream(&key).unwrap()
+        };
+        stream.entries.push((id, stream_data));
+        Ok(())
     }
 
     pub fn len(&self) -> usize {

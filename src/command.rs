@@ -1,11 +1,18 @@
-use crate::{message::Message, replica::ReplicaCommand, store::Entry};
+use crate::{message::Message, replica::ReplicaCommand, store::Entry, stream::StreamData};
 use anyhow::Result;
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 
 #[derive(Debug, Clone)]
 pub struct CommandInfo {
     pub name: String,
     pub args: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct XaddArgs {
+    pub key: String,
+    pub id: String,
+    pub data: StreamData,
 }
 
 #[derive(Debug, Clone)]
@@ -22,6 +29,7 @@ pub enum Command {
     Config(String, String),
     Keys(String),
     Type(String),
+    Xadd(XaddArgs),
 }
 
 impl Command {
@@ -90,6 +98,11 @@ impl CommandInfo {
                 Some(Command::Keys(pattern))
             }
             "type" => Some(Command::Type(self.args.first().unwrap().to_owned())),
+            "xadd" => Some(Command::Xadd(XaddArgs {
+                key: self.args[0].clone(),
+                id: self.args[1].clone(),
+                data: get_stream_data(self.args[2..].to_vec()),
+            })),
             _ => None,
         }
     }
@@ -133,4 +146,12 @@ impl CommandInfo {
         }
         None
     }
+}
+
+fn get_stream_data(args: Vec<String>) -> StreamData {
+    let mut data = HashMap::new();
+    for i in (0..args.len()).step_by(2) {
+        data.insert(args[i].clone(), args[i + 1].clone());
+    }
+    StreamData { data }
 }

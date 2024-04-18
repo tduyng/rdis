@@ -1,5 +1,5 @@
 use crate::{
-    command::Command,
+    command::{Command, XaddArgs},
     connection::Connection,
     message::Message,
     protocol::rdb::Rdb,
@@ -53,6 +53,7 @@ impl Handler {
                             }
                             Command::Keys(pattern) => process_keys(&mut connection, &store, pattern).await?,
                             Command::Type(key) => process_type(&mut connection, &store, key).await?,
+                            Command::Xadd(args) => process_xadd(&mut connection, &store, args).await?,
                             _ => break,
                         }
                     }
@@ -77,7 +78,7 @@ async fn process_echo(connection: &mut Connection, message: String) -> Result<()
 }
 
 async fn process_get(connection: &mut Connection, store: &Arc<Mutex<Store>>, key: String) -> Result<()> {
-    let response = if let Some(entry) = store.lock().await.get_kv(key) {
+    let response = if let Some(entry) = store.lock().await.get_kv(&key) {
         format!("${}\r\n{}\r\n", entry.value.len(), entry.value)
     } else {
         "$-1\r\n".to_string()
@@ -93,7 +94,7 @@ async fn process_set(
     key: String,
     entry: Entry,
 ) -> Result<()> {
-    store.lock().await.set_kv(key, entry);
+    store.lock().await.set_kv(key, entry)?;
     connection.write_message(Message::Simple("OK".to_string())).await?;
 
     for replication in stream_info.repl_handles.lock().await.iter_mut() {
@@ -223,7 +224,7 @@ async fn process_keys(connection: &mut Connection, store: &Arc<Mutex<Store>>, pa
 
 async fn process_type(connection: &mut Connection, store: &Arc<Mutex<Store>>, key: String) -> Result<()> {
     let store = store.lock().await;
-    let value = store.get_kv(key);
+    let value = store.get_kv(&key);
 
     let response = match value {
         Some(_) => "string",
@@ -231,4 +232,11 @@ async fn process_type(connection: &mut Connection, store: &Arc<Mutex<Store>>, ke
     };
 
     connection.write_message(Message::Simple(response.to_string())).await
+}
+
+async fn process_xadd(connection: &mut Connection, store: &Arc<Mutex<Store>>, args: XaddArgs) -> Result<()> {
+    let mut store = store.lock().await;
+    store.set_stream(args.key, args.id.clone(), args.data)?;
+
+    connection.write_message(Message::Bulk(args.id)).await
 }
