@@ -2,6 +2,7 @@ use crate::{
     store::{Entry, Store},
     stream::StreamInfo,
 };
+use anyhow::Result;
 use std::{env, path::Path, sync::Arc};
 use tokio::{fs::File, io::AsyncReadExt};
 
@@ -32,19 +33,22 @@ impl Rdb {
         Some(buffer)
     }
 
-    pub fn parse_rdb(store: &mut Store, data: &[u8]) {
+    pub fn parse_rdb(store: &mut Store, data: &[u8]) -> Result<()> {
         let mut marker = 0;
         if !has_magic_number(data, &mut marker) {
-            return;
+            return Ok(());
         }
         if !find_database_selector(data, 0x00, &mut marker) {
-            return;
+            return Ok(());
         }
         if !read_resizedb_field(data, &mut marker) {
-            return;
+            return Ok(());
         }
-        read_value(store, data, &mut marker);
-        println!("{:2x}", data[marker]);
+        while data[marker] != 0xFF {
+            let (key, entry) = read_entry(data, &mut marker)?;
+            store.set(key, entry);
+        }
+        Ok(())
     }
 }
 
@@ -101,6 +105,7 @@ fn find_database_selector(data: &[u8], database: u8, marker: &mut usize) -> bool
     false
 }
 
+#[allow(dead_code)]
 fn read_length_encoded_int(data: &[u8], marker: &mut usize) -> Option<u64> {
     let original = data[*marker];
     let tag = original & 0x03;
@@ -150,22 +155,24 @@ fn read_resizedb_field(data: &[u8], marker: &mut usize) -> bool {
         return false;
     }
     *marker += 1;
-    let _ = read_length_encoded_int(data, marker);
+    *marker += 1;
+    *marker += 1;
     true
 }
 
-fn read_value(store: &mut Store, data: &[u8], marker: &mut usize) {
-    let value_type = data[*marker];
-    *marker += 1;
-    if value_type != 0 {
-        println!("Unknown key type: {}", value_type);
-        return;
+fn read_entry(data: &[u8], marker: &mut usize) -> Result<(String, Entry)> {
+    let mut offset = *marker;
+    let value_type = data[offset];
+    offset += 1;
+    if value_type != 0x00 {
+        return Err(anyhow::anyhow!("Unsupported value"));
     }
-    if let Some(key) = read_length_string(data, marker) {
-        if let Some(value) = read_length_string(data, marker) {
-            store.set(key, Entry::new(value, None));
-        }
-    }
+    let key =
+        read_length_string(data, &mut offset).ok_or_else(|| anyhow::anyhow!("Unable to read key from the entry"))?;
+    let value =
+        read_length_string(data, &mut offset).ok_or_else(|| anyhow::anyhow!("Unable to read value from the entry"))?;
+    *marker = offset;
+    Ok((key, Entry::new(value, None)))
 }
 
 fn read_length_string(data: &[u8], marker: &mut usize) -> Option<String> {
@@ -177,6 +184,6 @@ fn read_length_string(data: &[u8], marker: &mut usize) -> Option<String> {
         return None;
     }
     let slice = &data[start..end];
-    *marker += length;
+    *marker = end;
     String::from_utf8(slice.to_vec()).ok()
 }

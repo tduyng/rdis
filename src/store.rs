@@ -1,9 +1,9 @@
+use crate::protocol::rdb::Rdb;
+use anyhow::Result;
 use std::{
     collections::HashMap,
     time::{Duration, SystemTime},
 };
-
-use crate::protocol::rdb::Rdb;
 
 #[derive(Debug, Clone)]
 pub struct Entry {
@@ -75,7 +75,7 @@ impl Store {
         self.data.keys().cloned().collect()
     }
 
-    pub fn import_rdb(&mut self, data: &[u8]) {
+    pub fn import_rdb(&mut self, data: &[u8]) -> Result<()> {
         Rdb::parse_rdb(self, data)
     }
 }

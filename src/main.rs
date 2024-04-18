@@ -27,7 +27,7 @@ async fn main() -> Result<()> {
     {
         let rdb_data = Rdb::read_file(&stream_info).await;
         if let Some(data) = rdb_data {
-            store.lock().await.import_rdb(&data);
+            store.lock().await.import_rdb(&data)?;
         }
     }
 
