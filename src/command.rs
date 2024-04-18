@@ -16,6 +16,13 @@ pub struct XaddArgs {
 }
 
 #[derive(Debug, Clone)]
+pub struct XRangArgs {
+    pub key: String,
+    pub start: String,
+    pub end: String,
+}
+
+#[derive(Debug, Clone)]
 pub enum Command {
     Echo(String),
     Ping,
@@ -30,6 +37,7 @@ pub enum Command {
     Keys(String),
     Type(String),
     Xadd(XaddArgs),
+    XRange(XRangArgs),
 }
 
 impl Command {
@@ -102,6 +110,11 @@ impl CommandInfo {
                 key: self.args[0].clone(),
                 id: self.args[1].clone(),
                 data: get_stream_data(self.args[2..].to_vec()),
+            })),
+            "xrange" => Some(Command::XRange(XRangArgs {
+                key: self.args[0].clone(),
+                start: self.args[1].clone(),
+                end: self.args[2].clone(),
             })),
             _ => None,
         }

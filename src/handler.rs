@@ -1,11 +1,11 @@
 use crate::{
-    command::{Command, XaddArgs},
+    command::{Command, XRangArgs, XaddArgs},
     connection::Connection,
     message::Message,
     protocol::rdb::Rdb,
     replica::{replicate_channel, ReplicaCommand},
     store::{Entry, EntryValue, Store},
-    stream::StreamInfo,
+    stream::{StreamId, StreamInfo},
 };
 use anyhow::{Ok, Result};
 use std::{sync::Arc, time::Duration};
@@ -54,6 +54,7 @@ impl Handler {
                             Command::Keys(pattern) => process_keys(&mut connection, &store, pattern).await?,
                             Command::Type(key) => process_type(&mut connection, &store, key).await?,
                             Command::Xadd(args) => process_xadd(&mut connection, &store, args).await?,
+                            Command::XRange(args) => process_xrange(&mut connection, &store, args).await?,
                             _ => break,
                         }
                     }
@@ -243,4 +244,61 @@ async fn process_xadd(connection: &mut Connection, store: &Arc<Mutex<Store>>, ar
 
     store.set_stream(args.key, stream_id.clone(), args.data)?;
     connection.write_message(Message::Bulk(stream_id)).await
+}
+
+async fn get_xrange_start(id: &str) -> Option<StreamId> {
+    let (ms, seq) = id.split_once('-').unwrap_or((id, "0"));
+    let ms = ms.parse().expect("Unable to parse ms");
+    let seq = seq.parse().expect("Unable to parse seq");
+    Some(StreamId { ms, seq })
+}
+
+async fn get_xrange_end(store: &Arc<Mutex<Store>>, key: &str, id: &str) -> Option<StreamId> {
+    let mut store = store.lock().await;
+    let template = if id.contains('-') {
+        id.to_string()
+    } else {
+        format!("{}-*", id)
+    };
+    let id = store.generate_stream_id(key, &template)?;
+    Some(StreamId::from(id.as_str()))
+}
+
+async fn process_xrange(connection: &mut Connection, store: &Arc<Mutex<Store>>, args: XRangArgs) -> Result<()> {
+    let err_msg = "ERR Unable to parse start ID".to_string();
+    let start = match get_xrange_start(&args.start).await {
+        Some(start) => start,
+        None => {
+            return connection.write_message(Message::Error(err_msg)).await;
+        }
+    };
+
+    let end = match get_xrange_end(store, &args.key, &args.end).await {
+        Some(end) => end,
+        None => {
+            return connection.write_message(Message::Error(err_msg)).await;
+        }
+    };
+
+    let stream = match store.lock().await.get_stream_range(&args.key, Some(&start), Some(&end)) {
+        Some(stream) => stream,
+        None => {
+            return connection.write_message(Message::Error(err_msg)).await;
+        }
+    };
+
+    let message_content: Vec<_> = stream
+        .entries
+        .iter()
+        .map(|(id, data)| {
+            Message::Array(vec![
+                Message::Bulk(id.to_string()),
+                Message::Array(data.flatten().iter().map(|x| Message::Bulk(x.clone())).collect()),
+            ])
+        })
+        .collect();
+
+    connection.write_message(Message::Array(message_content)).await?;
+
+    Ok(())
 }

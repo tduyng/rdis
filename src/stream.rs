@@ -37,20 +37,56 @@ pub struct StreamData {
     pub data: HashMap<String, String>,
 }
 
+impl StreamData {
+    pub fn flatten(&self) -> Vec<String> {
+        let mut result = Vec::with_capacity(self.data.len() * 2);
+        for (key, value) in self.data.iter() {
+            result.push(key.clone());
+            result.push(value.clone());
+        }
+        result
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
+pub struct StreamId {
+    pub ms: u64,
+    pub seq: u64,
+}
+
+impl From<&str> for StreamId {
+    fn from(value: &str) -> Self {
+        let (ms_str, seq_str) = value.split_once('-').unwrap_or(("0", "0"));
+        let ms = ms_str.parse::<u64>().expect("Unable to parse ms value from string");
+        let seq = seq_str.parse::<u64>().expect("Unable to parse seq value from string");
+        Self { ms, seq }
+    }
+}
+
+impl std::fmt::Display for StreamId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}-{}", self.ms, self.seq)
+    }
+}
+
 #[derive(Debug)]
 pub struct Stream {
-    pub entries: Vec<(String, StreamData)>,
+    pub entries: Vec<(StreamId, StreamData)>,
 }
 
 impl Stream {
-    pub fn new() -> Self {
+    pub fn new(entries: Vec<(StreamId, StreamData)>) -> Self {
+        Self { entries }
+    }
+
+    pub fn empty() -> Self {
         Self { entries: Vec::new() }
     }
 }
 
 impl Default for Stream {
     fn default() -> Self {
-        Self::new()
+        Self::empty()
     }
 }
 

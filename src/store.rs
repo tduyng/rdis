@@ -1,6 +1,6 @@
 use crate::{
     protocol::rdb::Rdb,
-    stream::{Stream, StreamData},
+    stream::{Stream, StreamData, StreamId},
 };
 use anyhow::{anyhow, Result};
 use std::{
@@ -113,10 +113,11 @@ impl Store {
         let stream = if let Some(stream) = self.get_stream(&key) {
             stream
         } else {
-            self.data.insert(key.clone(), StoreItem::Stream(Stream::new()));
+            self.data.insert(key.clone(), StoreItem::Stream(Stream::empty()));
             self.get_stream(&key).unwrap()
         };
-        stream.entries.push((id, stream_data));
+        let stream_id = StreamId::from(id.as_str());
+        stream.entries.push((stream_id, stream_data));
         Ok(())
     }
 
@@ -131,12 +132,10 @@ impl Store {
         }
 
         let (last_id, _) = stream.entries.last().unwrap();
-        let (last_id_ms, last_id_seq) = last_id.split_once('-').unwrap_or_default();
+        let (last_id_ms, last_id_seq) = (last_id.ms, last_id.seq);
         let (cur_id_ms, cur_id_seq) = id.split_once('-').unwrap_or_default();
 
-        let last_id_ms = last_id_ms.parse::<u64>()?;
         let cur_id_ms = cur_id_ms.parse::<u64>()?;
-        let last_id_seq = last_id_seq.parse::<u64>()?;
         let cur_id_seq = cur_id_seq.parse::<u64>()?;
 
         if cur_id_ms == 0 && cur_id_seq == 0 {
@@ -154,7 +153,7 @@ impl Store {
 
     pub fn generate_stream_id(&mut self, key: &str, id_pattern: &str) -> Option<String> {
         if let Some(stream) = self.get_stream(key) {
-            let last_entry = stream.entries.last().map(|(last_entry, _)| last_entry.as_str());
+            let last_entry = stream.entries.last().map(|(last_entry, _)| last_entry);
             build_stream_id(id_pattern, last_entry)
         } else {
             build_stream_id(id_pattern, None)
@@ -176,9 +175,30 @@ impl Store {
     pub fn import_rdb(&mut self, data: &[u8]) -> Result<()> {
         Rdb::parse_rdb(self, data)
     }
+
+    pub fn get_stream_range(&mut self, key: &str, start: Option<&StreamId>, end: Option<&StreamId>) -> Option<Stream> {
+        let stream = self.get_stream(key)?;
+        let mut range_entries: Vec<(StreamId, StreamData)> = Vec::new();
+
+        for (id, data) in &stream.entries {
+            if let Some(start_id) = start {
+                if id < start_id {
+                    continue;
+                }
+            }
+            if let Some(end_id) = end {
+                if id > end_id {
+                    break;
+                }
+            }
+            range_entries.push((id.clone(), data.clone()));
+        }
+
+        Some(Stream { entries: range_entries })
+    }
 }
 
-fn build_stream_id(pattern: &str, last_stream_entry: Option<&str>) -> Option<String> {
+fn build_stream_id(pattern: &str, last_stream_entry: Option<&StreamId>) -> Option<String> {
     let pattern = if pattern.len() < 3 { "*-*" } else { pattern };
     let (cur_id_ms, cur_id_seq) = pattern.split_once('-')?;
     let mut id_ms: String = cur_id_ms.to_string();
@@ -192,9 +212,9 @@ fn build_stream_id(pattern: &str, last_stream_entry: Option<&str>) -> Option<Str
     }
 
     let relevant_stream_entry = if let Some(last_id) = last_stream_entry {
-        let (last_id_ms, last_id_seq) = last_id.split_once('-').unwrap();
+        let (last_id_ms, last_id_seq) = (last_id.ms, last_id.seq);
 
-        if last_id_ms == id_ms {
+        if last_id_ms.to_string() == id_ms {
             Some(last_id_seq)
         } else {
             None
@@ -206,7 +226,7 @@ fn build_stream_id(pattern: &str, last_stream_entry: Option<&str>) -> Option<Str
     let auto_generate_seq = cur_id_seq == "*";
     if let Some(last_id_seq) = relevant_stream_entry {
         if auto_generate_seq {
-            let next_seq = last_id_seq.parse::<u64>().unwrap() + 1;
+            let next_seq = last_id_seq + 1;
             id_seq = next_seq.to_string();
         }
     } else if auto_generate_seq {
