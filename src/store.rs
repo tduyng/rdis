@@ -5,11 +5,21 @@ use std::{
     time::{Duration, SystemTime},
 };
 
+pub trait EntryValue {
+    fn value_type(&self) -> String;
+}
+
 #[derive(Debug, Clone)]
 pub struct Entry {
     pub value: String,
     pub expiry_time: Option<Duration>,
     pub expiry_at: Option<SystemTime>,
+}
+
+impl EntryValue for Entry {
+    fn value_type(&self) -> String {
+        "string".to_string()
+    }
 }
 
 impl Entry {
@@ -25,16 +35,31 @@ impl Entry {
         } else {
             Self {
                 value,
-                expiry_time: None,
                 expiry_at: None,
+                expiry_time: None,
             }
         }
     }
 }
 
 #[derive(Debug)]
+pub enum StoreItem {
+    KeyValueEntry(Entry),
+    Stream(),
+}
+
+impl EntryValue for StoreItem {
+    fn value_type(&self) -> String {
+        match self {
+            Self::KeyValueEntry(x) => x.value_type(),
+            Self::Stream() => "stream".to_string(),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct Store {
-    pub data: HashMap<String, Entry>,
+    pub data: HashMap<String, StoreItem>,
 }
 
 impl Default for Store {
@@ -48,13 +73,17 @@ impl Store {
         Self { data: HashMap::new() }
     }
     pub fn set(&mut self, key: String, entry: Entry) {
-        self.data.insert(key, entry);
+        self.data.insert(key, StoreItem::KeyValueEntry(entry));
     }
 
     pub fn get(&self, key: String) -> Option<&Entry> {
-        let entry = self.data.get(&key);
-        entry?;
-        let entry = entry.unwrap();
+        let store_item = self.data.get(&key)?;
+        let entry = if let StoreItem::KeyValueEntry(e) = store_item {
+            e
+        } else {
+            return None;
+        };
+
         if let Some(expiry_date_time) = entry.expiry_at {
             if SystemTime::now() > expiry_date_time {
                 return None;
