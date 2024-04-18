@@ -152,6 +152,15 @@ impl Store {
         Ok(())
     }
 
+    pub fn generate_stream_id(&mut self, key: &str, id_pattern: &str) -> Option<String> {
+        if let Some(stream) = self.get_stream(key) {
+            let last_entry = stream.entries.last().map(|(last_entry, _)| last_entry.as_str());
+            build_stream_id(id_pattern, last_entry)
+        } else {
+            build_stream_id(id_pattern, None)
+        }
+    }
+
     pub fn len(&self) -> usize {
         self.data.len()
     }
@@ -167,4 +176,32 @@ impl Store {
     pub fn import_rdb(&mut self, data: &[u8]) -> Result<()> {
         Rdb::parse_rdb(self, data)
     }
+}
+
+fn build_stream_id(pattern: &str, last_stream_entry: Option<&str>) -> Option<String> {
+    let (cur_id_ms, cur_id_seq) = pattern.split_once('-')?;
+    let auto_generate_seq = cur_id_seq == "*";
+
+    let id_seq = if let Some(last_id) = last_stream_entry {
+        let (last_id_ms, last_id_seq) = last_id.split_once('-')?;
+
+        if cur_id_ms == last_id_ms && auto_generate_seq {
+            let next_seq = last_id_seq.parse::<u64>().unwrap_or_default() + 1;
+            next_seq.to_string()
+        } else if cur_id_ms != last_id_ms && auto_generate_seq {
+            "0".to_string()
+        } else {
+            cur_id_seq.to_string()
+        }
+    } else if auto_generate_seq {
+        if cur_id_ms == "0" {
+            "1".to_string()
+        } else {
+            "0".to_string()
+        }
+    } else {
+        cur_id_seq.to_string()
+    };
+
+    Some(format!("{}-{}", cur_id_ms, id_seq))
 }
