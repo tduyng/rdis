@@ -43,7 +43,7 @@ impl Rdb {
         if !read_resizedb_field(data, &mut marker) {
             return;
         }
-        read_value(data, &mut marker, store);
+        read_value(store, data, &mut marker);
         println!("{:2x}", data[marker]);
     }
 }
@@ -154,17 +154,29 @@ fn read_resizedb_field(data: &[u8], marker: &mut usize) -> bool {
     true
 }
 
-fn read_value(data: &[u8], marker: &mut usize, store: &mut Store) {
+fn read_value(store: &mut Store, data: &[u8], marker: &mut usize) {
     let value_type = data[*marker];
     *marker += 1;
     if value_type != 0 {
         println!("Unknown key type: {}", value_type);
         return;
     }
+    if let Some(key) = read_length_string(data, marker) {
+        if let Some(value) = read_length_string(data, marker) {
+            store.set(key, Entry::new(value, None));
+        }
+    }
+}
+
+fn read_length_string(data: &[u8], marker: &mut usize) -> Option<String> {
     let length = data[*marker] as usize;
     *marker += 1;
     let start = *marker;
     let end = start + length;
-    let key = std::str::from_utf8(&data[start..end]).unwrap().to_string();
-    store.set(key, Entry::new("123".to_string(), None));
+    if end > data.len() {
+        return None;
+    }
+    let slice = &data[start..end];
+    *marker += length;
+    String::from_utf8(slice.to_vec()).ok()
 }
