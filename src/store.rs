@@ -210,6 +210,13 @@ impl Store {
         }
         Some(Stream::new(read_entries))
     }
+
+    pub fn get_lastest_stream(&mut self, key: &str) -> Option<&StreamId> {
+        let stream = self.get_stream(key)?;
+        let last_entry = stream.entries.last()?;
+        let (last_id, _) = last_entry;
+        Some(last_id)
+    }
 }
 
 fn build_stream_id(pattern: &str, last_stream_entry: Option<&StreamId>) -> Option<String> {

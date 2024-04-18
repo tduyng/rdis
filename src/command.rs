@@ -1,9 +1,4 @@
-use crate::{
-    message::Message,
-    replica::ReplicaCommand,
-    store::Entry,
-    stream::{StreamData, StreamId},
-};
+use crate::{message::Message, replica::ReplicaCommand, store::Entry, stream::StreamData};
 use anyhow::Result;
 use std::{
     collections::HashMap,
@@ -34,7 +29,7 @@ pub struct XRangArgs {
 pub struct XReadArgs {
     pub block: Option<SystemTime>,
     pub wait: bool,
-    pub requests: Vec<(String, StreamId)>,
+    pub requests: Vec<(String, String)>,
 }
 
 #[derive(Debug, Clone)]
@@ -153,13 +148,12 @@ impl CommandInfo {
                 let key_marker = marker;
                 let amount_of_streams = (self.args.len() - key_marker) / 2;
                 let id_marker = key_marker + amount_of_streams;
-                let mut requests: Vec<(String, StreamId)> = Vec::with_capacity(amount_of_streams);
+                let mut requests: Vec<(String, String)> = Vec::with_capacity(amount_of_streams);
 
                 for i in 0..amount_of_streams {
                     let key = self.args[key_marker + i].clone();
                     let id = self.args[id_marker + i].clone();
-                    let stream_id = StreamId::from(id.as_str());
-                    requests.push((key, stream_id));
+                    requests.push((key, id));
                 }
 
                 Some(Command::XRead(XReadArgs {

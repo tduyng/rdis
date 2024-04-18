@@ -306,10 +306,28 @@ async fn process_xrange(connection: &mut Connection, store: &Arc<Mutex<Store>>, 
 async fn process_xread(connection: &mut Connection, store: &Arc<Mutex<Store>>, args: XReadArgs) -> Result<()> {
     let mut messages: Vec<Message> = Vec::new();
 
+    let mut requests: Vec<(String, StreamId)> = Vec::new();
+    for i in 0..args.requests.len() {
+        let request = args.requests.get(i).unwrap();
+        let (key, id) = request;
+        let mut store = store.lock().await;
+        let stream_id = if id == "$" {
+            let result = store.get_lastest_stream(key);
+            match result {
+                Some(val) => val.clone(),
+                None => StreamId::from("0-0"),
+            }
+        } else {
+            StreamId::from(id.as_str())
+        };
+
+        requests.push((key.clone(), stream_id));
+    }
+
     loop {
         messages.clear();
 
-        for request in args.requests.iter() {
+        for request in &requests {
             let (key, id) = request;
             let stream = store.lock().await.get_stream_after_id(key, id);
             if stream.is_none() {
