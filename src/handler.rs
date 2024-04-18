@@ -257,6 +257,9 @@ async fn get_xrange_start(id: &str) -> Option<StreamId> {
 }
 
 async fn get_xrange_end(store: &Arc<Mutex<Store>>, key: &str, id: &str) -> Option<StreamId> {
+    if id == "+" {
+        return None;
+    }
     let mut store = store.lock().await;
     let template = if id.contains('-') {
         id.to_string()
