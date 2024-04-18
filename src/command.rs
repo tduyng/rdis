@@ -21,6 +21,7 @@ pub enum Command {
     Wait(u64),
     Config(String, String),
     Keys(String),
+    Type(String),
 }
 
 impl Command {
@@ -88,6 +89,7 @@ impl CommandInfo {
                 };
                 Some(Command::Keys(pattern))
             }
+            "type" => Some(Command::Type(self.args.first().unwrap().to_owned())),
             _ => None,
         }
     }

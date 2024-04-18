@@ -52,6 +52,7 @@ impl Handler {
                                 process_config(&mut connection, &stream_info, action, key).await?
                             }
                             Command::Keys(pattern) => process_keys(&mut connection, &store, pattern).await?,
+                            Command::Type(key) => process_type(&mut connection, &store, key).await?,
                             _ => break,
                         }
                     }
@@ -218,4 +219,16 @@ async fn process_keys(connection: &mut Connection, store: &Arc<Mutex<Store>>, pa
             .write_message(Message::Simple("Unsupported pattern".to_string()))
             .await
     }
+}
+
+async fn process_type(connection: &mut Connection, store: &Arc<Mutex<Store>>, key: String) -> Result<()> {
+    let store = store.lock().await;
+    let value = store.get(key);
+
+    let response = match value {
+        Some(_) => "string",
+        None => "none",
+    };
+
+    connection.write_message(Message::Simple(response.to_string())).await
 }
