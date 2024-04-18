@@ -5,7 +5,10 @@ use crate::{
     stream::{StreamData, StreamId},
 };
 use anyhow::Result;
-use std::{collections::HashMap, time::Duration};
+use std::{
+    collections::HashMap,
+    time::{Duration, SystemTime},
+};
 
 #[derive(Debug, Clone)]
 pub struct CommandInfo {
@@ -28,6 +31,13 @@ pub struct XRangArgs {
 }
 
 #[derive(Debug, Clone)]
+pub struct XReadArgs {
+    // pub block: Option<SystemTime>,
+    // pub wait: bool,
+    pub requests: Vec<(String, StreamId)>,
+}
+
+#[derive(Debug, Clone)]
 pub enum Command {
     Echo(String),
     Ping,
@@ -43,7 +53,7 @@ pub enum Command {
     Type(String),
     XAdd(XAddArgs),
     XRange(XRangArgs),
-    XRead(Vec<(String, StreamId)>),
+    XRead(XReadArgs),
 }
 
 impl Command {
@@ -139,7 +149,7 @@ impl CommandInfo {
                     requests.push((key, id));
                 }
 
-                Some(Command::XRead(requests))
+                Some(Command::XRead(XReadArgs { requests }))
             }
             _ => None,
         }

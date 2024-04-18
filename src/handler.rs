@@ -1,5 +1,5 @@
 use crate::{
-    command::{Command, XAddArgs, XRangArgs},
+    command::{Command, XAddArgs, XRangArgs, XReadArgs},
     connection::Connection,
     message::Message,
     protocol::rdb::Rdb,
@@ -300,15 +300,11 @@ async fn process_xrange(connection: &mut Connection, store: &Arc<Mutex<Store>>, 
     Ok(())
 }
 
-async fn process_xread(
-    connection: &mut Connection,
-    store: &Arc<Mutex<Store>>,
-    args: Vec<(String, StreamId)>,
-) -> Result<()> {
+async fn process_xread(connection: &mut Connection, store: &Arc<Mutex<Store>>, args: XReadArgs) -> Result<()> {
     let mut store_lock = store.lock().await;
     let mut messages: Vec<Message> = Vec::new();
 
-    for (key, id) in args {
+    for (key, id) in args.requests {
         match store_lock.get_stream_after_id(&key, &id) {
             Some(stream) => {
                 messages.push(Message::Array(vec![Message::Bulk(key.clone()), stream.to_message()]));
