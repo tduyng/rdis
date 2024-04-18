@@ -1,6 +1,6 @@
 use crate::{args::CliArgs, protocol::rdb::RdbConfig, replica::ReplicaHandle, utils::random_sha1_hex};
 use core::fmt;
-use std::net::{SocketAddr, ToSocketAddrs};
+use std::{collections::HashMap, hash::Hash, net::{SocketAddr, ToSocketAddrs}};
 use tokio::sync::Mutex;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -27,6 +27,24 @@ pub struct StreamInfo {
     pub socket_addr: SocketAddr,
     pub repl_handles: Mutex<Vec<ReplicaHandle>>,
     pub config: Mutex<RdbConfig>,
+}
+
+#[derive(Debug)]
+pub struct StreamData {
+    pub data: HashMap<String, String>
+}
+
+#[derive(Debug)]
+pub struct Stream {
+    pub entries: Vec<(String, StreamData)>,
+}
+
+impl Stream {
+    pub fn new() -> Self {
+        Self {
+            entries: Vec::new(),
+        }
+    }
 }
 
 impl StreamInfo {

@@ -1,4 +1,4 @@
-use crate::protocol::rdb::Rdb;
+use crate::{protocol::rdb::Rdb, stream::Stream};
 use anyhow::Result;
 use std::{
     collections::HashMap,
@@ -45,14 +45,14 @@ impl Entry {
 #[derive(Debug)]
 pub enum StoreItem {
     KeyValueEntry(Entry),
-    Stream(),
+    Stream(Stream),
 }
 
 impl EntryValue for StoreItem {
     fn value_type(&self) -> String {
         match self {
             Self::KeyValueEntry(x) => x.value_type(),
-            Self::Stream() => "stream".to_string(),
+            Self::Stream(_) => "stream".to_string(),
         }
     }
 }
@@ -72,11 +72,11 @@ impl Store {
     pub fn new() -> Self {
         Self { data: HashMap::new() }
     }
-    pub fn set(&mut self, key: String, entry: Entry) {
+    pub fn set_kv(&mut self, key: String, entry: Entry) {
         self.data.insert(key, StoreItem::KeyValueEntry(entry));
     }
 
-    pub fn get(&self, key: String) -> Option<&Entry> {
+    pub fn get_kv(&self, key: String) -> Option<&Entry> {
         let store_item = self.data.get(&key)?;
         let entry = if let StoreItem::KeyValueEntry(e) = store_item {
             e

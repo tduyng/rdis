@@ -51,7 +51,7 @@ impl Rdb {
         }
         while data[marker] != 0xFF {
             let (key, entry) = read_entry(data, &mut marker)?;
-            store.set(key, entry);
+            store.set_kv(key, entry);
         }
         Ok(())
     }
