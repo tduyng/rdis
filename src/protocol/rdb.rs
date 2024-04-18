@@ -2,8 +2,13 @@ use crate::{
     store::{Entry, Store},
     stream::StreamInfo,
 };
-use anyhow::Result;
-use std::{env, path::Path, sync::Arc};
+use anyhow::{anyhow, Result};
+use std::{
+    env,
+    path::Path,
+    sync::Arc,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 use tokio::{fs::File, io::AsyncReadExt};
 
 pub struct Rdb {}
@@ -160,19 +165,53 @@ fn read_resizedb_field(data: &[u8], marker: &mut usize) -> bool {
     true
 }
 
+fn read_key_value_pair(data: &[u8], marker: &mut usize) -> Result<(String, String)> {
+    let key = read_length_string(data, marker).ok_or_else(|| anyhow!("Unable to read key from the entry"))?;
+    let value = read_length_string(data, marker).ok_or_else(|| anyhow!("Unable to read value from the entry"))?;
+    Ok((key, value))
+}
+
 fn read_entry(data: &[u8], marker: &mut usize) -> Result<(String, Entry)> {
     let mut offset = *marker;
-    let value_type = data[offset];
-    offset += 1;
-    if value_type != 0x00 {
-        return Err(anyhow::anyhow!("Unsupported value"));
+    match data[offset] {
+        0xFC => {
+            offset += 1;
+            let expiry_time = u64::from_le_bytes([
+                data[offset],
+                data[offset + 1],
+                data[offset + 2],
+                data[offset + 3],
+                data[offset + 4],
+                data[offset + 5],
+                data[offset + 6],
+                data[offset + 7],
+            ]);
+            offset += 8;
+            let value_type = data[offset];
+            offset += 1;
+            if value_type != 0x00 {
+                return Err(anyhow!("Unsupported value"));
+            }
+            let (key, value) = read_key_value_pair(data, &mut offset)?;
+
+            let expiry = UNIX_EPOCH + Duration::from_millis(expiry_time);
+            let current = SystemTime::now();
+            let duration = expiry
+                .duration_since(current)
+                .unwrap_or_else(|_| Duration::from_secs(0));
+            *marker = offset;
+            Ok((key, Entry::new(value, Some(duration))))
+        }
+        _ => {
+            if data[offset] != 0x00 {
+                return Err(anyhow!("Unsupported value"));
+            }
+            offset += 1;
+            let (key, value) = read_key_value_pair(data, &mut offset)?;
+            *marker = offset;
+            Ok((key, Entry::new(value, None)))
+        }
     }
-    let key =
-        read_length_string(data, &mut offset).ok_or_else(|| anyhow::anyhow!("Unable to read key from the entry"))?;
-    let value =
-        read_length_string(data, &mut offset).ok_or_else(|| anyhow::anyhow!("Unable to read value from the entry"))?;
-    *marker = offset;
-    Ok((key, Entry::new(value, None)))
 }
 
 fn read_length_string(data: &[u8], marker: &mut usize) -> Option<String> {
