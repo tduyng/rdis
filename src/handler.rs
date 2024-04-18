@@ -1,5 +1,5 @@
 use crate::{
-    command::{Command, XRangArgs, XaddArgs},
+    command::{Command, XRangArgs, XAddArgs},
     connection::Connection,
     message::Message,
     protocol::rdb::Rdb,
@@ -53,7 +53,7 @@ impl Handler {
                             }
                             Command::Keys(pattern) => process_keys(&mut connection, &store, pattern).await?,
                             Command::Type(key) => process_type(&mut connection, &store, key).await?,
-                            Command::Xadd(args) => process_xadd(&mut connection, &store, args).await?,
+                            Command::XAdd(args) => process_xadd(&mut connection, &store, args).await?,
                             Command::XRange(args) => process_xrange(&mut connection, &store, args).await?,
                             _ => break,
                         }
@@ -235,7 +235,7 @@ async fn process_type(connection: &mut Connection, store: &Arc<Mutex<Store>>, ke
     connection.write_message(Message::Simple(value_type)).await
 }
 
-async fn process_xadd(connection: &mut Connection, store: &Arc<Mutex<Store>>, args: XaddArgs) -> Result<()> {
+async fn process_xadd(connection: &mut Connection, store: &Arc<Mutex<Store>>, args: XAddArgs) -> Result<()> {
     let mut store = store.lock().await;
     let stream_id = store.generate_stream_id(&args.key, &args.id).unwrap();
     if let Err(err) = store.validate_stream(&args.key, &stream_id) {

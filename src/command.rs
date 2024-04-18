@@ -9,7 +9,7 @@ pub struct CommandInfo {
 }
 
 #[derive(Debug, Clone)]
-pub struct XaddArgs {
+pub struct XAddArgs {
     pub key: String,
     pub id: String,
     pub data: StreamData,
@@ -36,7 +36,7 @@ pub enum Command {
     Config(String, String),
     Keys(String),
     Type(String),
-    Xadd(XaddArgs),
+    XAdd(XAddArgs),
     XRange(XRangArgs),
 }
 
@@ -106,7 +106,7 @@ impl CommandInfo {
                 Some(Command::Keys(pattern))
             }
             "type" => Some(Command::Type(self.args.first().unwrap().to_owned())),
-            "xadd" => Some(Command::Xadd(XaddArgs {
+            "xadd" => Some(Command::XAdd(XAddArgs {
                 key: self.args[0].clone(),
                 id: self.args[1].clone(),
                 data: get_stream_data(self.args[2..].to_vec()),
