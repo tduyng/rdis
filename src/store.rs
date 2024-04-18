@@ -5,7 +5,7 @@ use crate::{
 use anyhow::{anyhow, Result};
 use std::{
     collections::HashMap,
-    time::{Duration, SystemTime},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 pub trait EntryValue {
@@ -179,29 +179,39 @@ impl Store {
 }
 
 fn build_stream_id(pattern: &str, last_stream_entry: Option<&str>) -> Option<String> {
+    let pattern = if pattern.len() < 3 { "*-*" } else { pattern };
     let (cur_id_ms, cur_id_seq) = pattern.split_once('-')?;
-    let auto_generate_seq = cur_id_seq == "*";
+    let mut id_ms: String = cur_id_ms.to_string();
+    let mut id_seq: String = cur_id_seq.to_string();
 
-    let id_seq = if let Some(last_id) = last_stream_entry {
-        let (last_id_ms, last_id_seq) = last_id.split_once('-')?;
+    let auto_generate_ms = cur_id_ms == "*";
+    if auto_generate_ms {
+        let now = SystemTime::now();
+        let time_since_unix_time = now.duration_since(UNIX_EPOCH).unwrap();
+        id_ms = time_since_unix_time.as_millis().to_string();
+    }
 
-        if cur_id_ms == last_id_ms && auto_generate_seq {
-            let next_seq = last_id_seq.parse::<u64>().unwrap_or_default() + 1;
-            next_seq.to_string()
-        } else if cur_id_ms != last_id_ms && auto_generate_seq {
-            "0".to_string()
+    let relevant_stream_entry = if let Some(last_id) = last_stream_entry {
+        let (last_id_ms, last_id_seq) = last_id.split_once('-').unwrap();
+
+        if last_id_ms == id_ms {
+            Some(last_id_seq)
         } else {
-            cur_id_seq.to_string()
-        }
-    } else if auto_generate_seq {
-        if cur_id_ms == "0" {
-            "1".to_string()
-        } else {
-            "0".to_string()
+            None
         }
     } else {
-        cur_id_seq.to_string()
+        None
     };
 
-    Some(format!("{}-{}", cur_id_ms, id_seq))
+    let auto_generate_seq = cur_id_seq == "*";
+    if let Some(last_id_seq) = relevant_stream_entry {
+        if auto_generate_seq {
+            let next_seq = last_id_seq.parse::<u64>().unwrap() + 1;
+            id_seq = next_seq.to_string();
+        }
+    } else if auto_generate_seq {
+        id_seq = if id_ms == "0" { "1".to_string() } else { "0".to_string() };
+    }
+
+    Some(format!("{}-{}", id_ms, id_seq))
 }
