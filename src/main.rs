@@ -4,6 +4,7 @@ use redis_starter_rust::{
     args::CliArgs,
     connection::Connection,
     handler::Handler,
+    protocol::rdb::Rdb,
     replica::{handler::ReplicaHandler, handshake::perform_handshake_to_master, should_replicate},
     store::Store,
     stream::StreamInfo,
@@ -21,6 +22,13 @@ async fn main() -> Result<()> {
     }
     if let Some(dbfilename) = args.dbfilename {
         stream_info.config.lock().await.dbfilename = Some(dbfilename);
+    }
+
+    {
+        let rdb_data = Rdb::read_file(&stream_info).await;
+        if let Some(data) = rdb_data {
+            store.lock().await.import_rdb(&data);
+        }
     }
 
     if should_replicate(&stream_info).await {

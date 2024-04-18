@@ -3,6 +3,8 @@ use std::{
     time::{Duration, SystemTime},
 };
 
+use crate::protocol::rdb::Rdb;
+
 #[derive(Debug, Clone)]
 pub struct Entry {
     pub value: String,
@@ -67,5 +69,13 @@ impl Store {
 
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+
+    pub fn keys(&self) -> Vec<String> {
+        self.data.keys().cloned().collect()
+    }
+
+    pub fn import_rdb(&mut self, data: &[u8]) {
+        Rdb::parse_rdb(self, data)
     }
 }

@@ -20,6 +20,7 @@ pub enum Command {
     Psync,
     Wait(u64),
     Config(String, String),
+    Keys(String),
 }
 
 impl Command {
@@ -78,6 +79,14 @@ impl CommandInfo {
                 let action = self.args[0].clone();
                 let key = self.args[1].clone();
                 Some(Command::Config(action, key))
+            }
+            "keys" => {
+                let pattern = if !self.args.is_empty() {
+                    self.args.first().unwrap().to_owned()
+                } else {
+                    String::new()
+                };
+                Some(Command::Keys(pattern))
             }
             _ => None,
         }

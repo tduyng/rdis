@@ -51,6 +51,7 @@ impl Handler {
                             Command::Config(action, key) => {
                                 process_config(&mut connection, &stream_info, action, key).await?
                             }
+                            Command::Keys(pattern) => process_keys(&mut connection, &store, pattern).await?,
                             _ => break,
                         }
                     }
@@ -200,4 +201,21 @@ async fn process_config(
         }
     }
     Ok(())
+}
+
+async fn process_keys(connection: &mut Connection, store: &Arc<Mutex<Store>>, pattern: String) -> Result<()> {
+    if pattern == "*" {
+        let keys = store
+            .lock()
+            .await
+            .keys()
+            .into_iter()
+            .map(Message::Bulk)
+            .collect::<Vec<_>>();
+        connection.write_message(Message::Array(keys)).await
+    } else {
+        connection
+            .write_message(Message::Simple("Unsupported pattern".to_string()))
+            .await
+    }
 }
